@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: record-and-grow
+  datasource:
+    url: jdbc:postgresql://localhost:5432/recordandgrow
+    username: recordandgrow
+    password: recordandgrow
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # 数据库未启动时应用也能启动，由 /api/health 负责真实探活
+      initialization-fail-timeout: 0
+      # 探活超时 5 秒，避免数据库不可用时健康检查长时间阻塞
+      connection-timeout: 5000
+      maximum-pool-size: 5
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+
+logging:
+  level:
+    com.recordandgrow: debug
