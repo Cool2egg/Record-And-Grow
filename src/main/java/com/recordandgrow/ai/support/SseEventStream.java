@@ -19,6 +19,11 @@ public interface SseEventStream extends AutoCloseable {
 
     IOException error();
 
+    /**
+     * 最近一次收到任意 SSE 行（含 keep-alive 注释）的时间，用于看门狗续命。
+     */
+    long lastActivityNanos();
+
     @Override
     void close();
 }

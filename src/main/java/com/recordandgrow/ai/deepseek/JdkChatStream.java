@@ -34,7 +34,10 @@ final class JdkChatStream implements ChatStream {
     private final AtomicBoolean ended = new AtomicBoolean(false);
     private final StreamWatchdog watchdog;
 
-    private volatile boolean timedOut;
+    /** 只在 close() 置位；与 ended（observer 通知）分开，避免取消/失败/正常结束混在一起。 */
+    private volatile boolean cancelled;
+    /** 是否收到协议终止符 data: [DONE]。 */
+    private boolean sawDone;
     private volatile boolean finished;
     private ChatChunk pending;
     private ChatUsage lastUsage;
@@ -55,6 +58,9 @@ final class JdkChatStream implements ChatStream {
 
     @Override
     public boolean hasNext() {
+        if (cancelled) {
+            return false;
+        }
         if (pending != null) {
             return true;
         }
@@ -63,7 +69,7 @@ final class JdkChatStream implements ChatStream {
             throw existing;
         }
         while (true) {
-            if (finished) {
+            if (cancelled || finished) {
                 return false;
             }
             String data;
@@ -73,8 +79,14 @@ final class JdkChatStream implements ChatStream {
                 Thread.currentThread().interrupt();
                 throw fail(new AiException(AiErrorType.NETWORK, "等待流式响应被中断", e));
             }
+            // 任意 SSE 行（含 keep-alive 注释）都续命；注释不会变成 data，所以不能只在 data 分支里调。
+            watchdog.activity(source.lastActivityNanos());
+            if (cancelled) {
+                return false;
+            }
             if (data != null) {
                 if ("[DONE]".equals(data)) {
+                    sawDone = true;
                     finishNormally();
                     return false;
                 }
@@ -96,7 +108,7 @@ final class JdkChatStream implements ChatStream {
                 }
                 continue;
             }
-            if (timedOut) {
+            if (watchdog.timeoutFired()) {
                 throw fail(new AiException(AiErrorType.TIMEOUT, "DeepSeek 流式响应超时"));
             }
             if (source.failed()) {
@@ -104,14 +116,22 @@ final class JdkChatStream implements ChatStream {
                         "DeepSeek 流式响应中断", source.error()));
             }
             if (source.completed()) {
-                finishNormally();
-                return false;
+                if (sawDone) {
+                    finishNormally();
+                    return false;
+                }
+                // 干净 EOF 但没收到 [DONE]：上游/代理提前关连接，不能当成正常结束。
+                throw fail(new AiException(AiErrorType.STREAM_INTERRUPTED,
+                        "DeepSeek 流在 [DONE] 前结束"));
             }
         }
     }
 
     @Override
     public ChatChunk next() {
+        if (cancelled) {
+            throw new NoSuchElementException("流已取消");
+        }
         if (!hasNext()) {
             throw new NoSuchElementException("流已结束");
         }
@@ -122,6 +142,7 @@ final class JdkChatStream implements ChatStream {
 
     @Override
     public void close() {
+        cancelled = true;
         boolean shouldNotify = ended.compareAndSet(false, true);
         closeResources();
         if (shouldNotify) {
@@ -130,7 +151,6 @@ final class JdkChatStream implements ChatStream {
     }
 
     private void onWatchdogTimeout() {
-        timedOut = true;
         closeResources();
     }
 

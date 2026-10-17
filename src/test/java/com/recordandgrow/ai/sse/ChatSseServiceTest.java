@@ -4,6 +4,7 @@ import com.recordandgrow.ai.AiErrorType;
 import com.recordandgrow.ai.AiException;
 import com.recordandgrow.ai.ChatChunk;
 import com.recordandgrow.ai.ChatClient;
+import com.recordandgrow.ai.ChatMessage;
 import com.recordandgrow.ai.ChatRequest;
 import com.recordandgrow.ai.ChatResponse;
 import com.recordandgrow.ai.ChatStream;
@@ -19,12 +20,20 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -105,6 +114,49 @@ class ChatSseServiceTest {
                 .andExpect(content().string(containsString("ping")));
     }
 
+    @Test
+    void senderRejectsEventsAfterCancel() throws Exception {
+        RecordingEmitter emitter = new RecordingEmitter();
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        ChatSseService.SseSender sender = new ChatSseService.SseSender(emitter, cancelled);
+
+        assertThat(sender.send(SseEmitter.event().name("delta").data(new SseEvents.Delta("a")))).isTrue();
+        sender.cancel();
+        assertThat(sender.send(SseEmitter.event().name("delta").data(new SseEvents.Delta("b")))).isFalse();
+        assertThat(emitter.sends).isEqualTo(1);
+    }
+
+    @Test
+    void unexpectedRuntimeExceptionSendsError() throws Exception {
+        chatClient.streamRuntimeError = new IllegalStateException("boom");
+        RecordingEmitter emitter = new RecordingEmitter();
+        ChatSseService service = new ChatSseService(
+                chatClient, Duration.ofSeconds(5), Duration.ofSeconds(5), () -> emitter);
+
+        service.stream(chatRequest());
+
+        assertThat(emitter.awaitCompletion()).isTrue();
+        assertThat(emitter.payloads).anyMatch(payload -> payload.contains("UPSTREAM_ERROR"));
+    }
+
+    @Test
+    void clientDisconnectDoesNotSendError() throws Exception {
+        chatClient.stream = new FakeStream(List.of(new ChatChunk("a", null, null)), 0);
+        RecordingEmitter emitter = new RecordingEmitter();
+        emitter.failOnSend = 2; // start 成功，delta 写入失败
+        ChatSseService service = new ChatSseService(
+                chatClient, Duration.ofSeconds(5), Duration.ofSeconds(5), () -> emitter);
+
+        service.stream(chatRequest());
+
+        assertThat(emitter.awaitCompletion()).isTrue();
+        assertThat(emitter.payloads).noneMatch(payload -> payload.contains("error"));
+    }
+
+    private static ChatRequest chatRequest() {
+        return new ChatRequest(List.of(new ChatMessage(ChatMessage.Role.USER, "hi")), null, null);
+    }
+
     private static String body() {
         return "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
     }
@@ -113,6 +165,7 @@ class ChatSseServiceTest {
 
         private ChatStream stream;
         private AiException streamError;
+        private RuntimeException streamRuntimeError;
 
         @Override
         public ChatResponse complete(ChatRequest request) {
@@ -121,10 +174,40 @@ class ChatSseServiceTest {
 
         @Override
         public ChatStream stream(ChatRequest request) {
+            if (streamRuntimeError != null) {
+                throw streamRuntimeError;
+            }
             if (streamError != null) {
                 throw streamError;
             }
             return stream;
+        }
+    }
+
+    private static final class RecordingEmitter extends SseEmitter {
+
+        private final List<String> payloads = Collections.synchronizedList(new ArrayList<>());
+        private final CountDownLatch completed = new CountDownLatch(1);
+        private int sends;
+        private int failOnSend;
+
+        @Override
+        public synchronized void send(SseEmitter.SseEventBuilder builder) throws IOException {
+            sends++;
+            if (failOnSend > 0 && sends == failOnSend) {
+                throw new IOException("client gone");
+            }
+            builder.build().forEach(data -> payloads.add(String.valueOf(data.getData())));
+        }
+
+        @Override
+        public synchronized void complete() {
+            completed.countDown();
+            super.complete();
+        }
+
+        private boolean awaitCompletion() throws InterruptedException {
+            return completed.await(2, TimeUnit.SECONDS);
         }
     }
 

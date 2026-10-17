@@ -30,6 +30,7 @@ public final class PublisherSseEventStream implements SseEventStream, Flow.Subsc
     private volatile boolean closed;
     private volatile boolean completed;
     private volatile IOException error;
+    private volatile long lastActivityNanos = System.nanoTime();
 
     @Override
     public void onSubscribe(Flow.Subscription subscription) {
@@ -103,6 +104,11 @@ public final class PublisherSseEventStream implements SseEventStream, Flow.Subsc
     }
 
     @Override
+    public long lastActivityNanos() {
+        return lastActivityNanos;
+    }
+
+    @Override
     public void close() {
         closed = true;
         Flow.Subscription current = subscription;
@@ -112,6 +118,8 @@ public final class PublisherSseEventStream implements SseEventStream, Flow.Subsc
     }
 
     private void processLine(String text) {
+        // 注释行（DeepSeek 的 : keep-alive）也算活动，必须给看门狗续命。
+        lastActivityNanos = System.nanoTime();
         if (text.isEmpty()) {
             flushEvent();
             return;

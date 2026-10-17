@@ -6,6 +6,7 @@ import com.recordandgrow.ai.AiException;
 import com.recordandgrow.ai.ChatChunk;
 import com.recordandgrow.ai.ChatUsage;
 import com.recordandgrow.ai.NoopAiCallObserver;
+import com.recordandgrow.ai.support.FakeSseEventStream;
 import com.recordandgrow.ai.support.PublisherSseEventStream;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -16,7 +17,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,10 +78,29 @@ class JdkChatStreamTest {
     }
 
     @Test
-    void idleTimeoutFires() {
+    void idleTimeoutFiresAfterFirstContent() {
         assertTimeoutPreemptively(Duration.ofSeconds(3), () -> {
-            PublisherSseEventStream source = source();
-            try (JdkChatStream stream = stream(source, new NoopAiCallObserver(), 0.15, 5)) {
+            FakeSseEventStream source = new FakeSseEventStream();
+            try (JdkChatStream stream = new JdkChatStream(source, new DeepSeekSseParser(mapper),
+                    new NoopAiCallObserver(), "test",
+                    Duration.ofMillis(150), Duration.ofSeconds(5), Duration.ofSeconds(5))) {
+                source.emit(contentEvent("a"));
+                assertThat(stream.hasNext()).isTrue();
+                assertThat(stream.next().contentDelta()).isEqualTo("a");
+                assertThatThrownBy(stream::hasNext)
+                        .isInstanceOfSatisfying(AiException.class,
+                                e -> assertThat(e.getType()).isEqualTo(AiErrorType.TIMEOUT));
+            }
+        });
+    }
+
+    @Test
+    void firstTokenTimeoutFiresBeforeAnyContent() {
+        assertTimeoutPreemptively(Duration.ofSeconds(3), () -> {
+            FakeSseEventStream source = new FakeSseEventStream();
+            try (JdkChatStream stream = new JdkChatStream(source, new DeepSeekSseParser(mapper),
+                    new NoopAiCallObserver(), "test",
+                    Duration.ofSeconds(5), Duration.ofMillis(150), Duration.ofSeconds(5))) {
                 assertThatThrownBy(stream::hasNext)
                         .isInstanceOfSatisfying(AiException.class,
                                 e -> assertThat(e.getType()).isEqualTo(AiErrorType.TIMEOUT));
@@ -101,6 +126,86 @@ class JdkChatStreamTest {
         stream.close();
         stream.close();
         assertThat(cancelled.get()).isEqualTo(1);
+    }
+
+    @Test
+    void closeWhileHasNextBlockedReturnsFalse() throws Exception {
+        FakeSseEventStream source = new FakeSseEventStream();
+        try (JdkChatStream stream = new JdkChatStream(source, new DeepSeekSseParser(mapper),
+                new NoopAiCallObserver(), "test",
+                Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5))) {
+            ExecutorService pool = Executors.newSingleThreadExecutor();
+            Future<Boolean> result = pool.submit(stream::hasNext);
+            Thread.sleep(100);
+            stream.close();
+            assertThat(result.get(1, TimeUnit.SECONDS)).isFalse();
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void activityResetsIdleTimeout() {
+        assertTimeoutPreemptively(Duration.ofSeconds(3), () -> {
+            FakeSseEventStream source = new FakeSseEventStream();
+            try (JdkChatStream stream = new JdkChatStream(source, new DeepSeekSseParser(mapper),
+                    new NoopAiCallObserver(), "test",
+                    Duration.ofMillis(250), Duration.ofSeconds(5), Duration.ofSeconds(5))) {
+                AtomicBoolean running = new AtomicBoolean(true);
+                Thread producer = new Thread(() -> {
+                    while (running.get()) {
+                        source.emit(contentEvent("a"));
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
+                });
+                producer.start();
+                long deadline = System.nanoTime() + Duration.ofMillis(800).toNanos();
+                while (System.nanoTime() < deadline) {
+                    assertThat(stream.hasNext()).isTrue();
+                    stream.next();
+                }
+                running.set(false);
+                producer.join(1000);
+            }
+        });
+    }
+
+    @Test
+    void firstTokenNotKilledByIdle() throws Exception {
+        FakeSseEventStream source = new FakeSseEventStream();
+        try (JdkChatStream stream = new JdkChatStream(source, new DeepSeekSseParser(mapper),
+                new NoopAiCallObserver(), "test",
+                Duration.ofMillis(100), Duration.ofSeconds(2), Duration.ofSeconds(5))) {
+            // 首包前 idle 不生效；300ms > idle(100ms) 但 < first-token(2s)，不应超时。
+            Thread.sleep(300);
+            source.emit(contentEvent("a"));
+            assertThat(stream.hasNext()).isTrue();
+            assertThat(stream.next().contentDelta()).isEqualTo("a");
+        }
+    }
+
+    @Test
+    void eofWithoutDoneIsInterrupted() {
+        FakeSseEventStream source = new FakeSseEventStream();
+        source.emit(contentEvent("a"));
+        source.complete();
+        try (JdkChatStream stream = new JdkChatStream(source, new DeepSeekSseParser(mapper),
+                new NoopAiCallObserver(), "test",
+                Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(5))) {
+            assertThat(stream.hasNext()).isTrue();
+            assertThat(stream.next().contentDelta()).isEqualTo("a");
+            assertThatThrownBy(stream::hasNext)
+                    .isInstanceOfSatisfying(AiException.class,
+                            e -> assertThat(e.getType()).isEqualTo(AiErrorType.STREAM_INTERRUPTED));
+        }
+    }
+
+    private static String contentEvent(String content) {
+        return "{\"choices\":[{\"delta\":{\"content\":\"" + content + "\"},\"finish_reason\":null}]}";
     }
 
     private JdkChatStream stream(String body, AiCallObserver observer, double idleSeconds, double totalSeconds) {

@@ -27,12 +27,16 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * 把 ChatStream 转发成 SSE。
  *
  * <p>事件：start / delta / done / error；等待上游时每 15s 发一次注释心跳。
  * 客户端断开时通过 onCompletion/onError 关闭上游；写失败也会触发同样的清理。
+ *
+ * <p>取消与写入共用 {@link SseSender} 的锁：取消置位后再调用 send 会被拒绝，
+ * 堵住「hasNext 返回 true 之后、send 之前」的窗口。
  */
 @Service
 public class ChatSseService {
@@ -50,8 +54,8 @@ public class ChatSseService {
             Executors.newVirtualThreadPerTaskExecutor();
 
     private final ChatClient chatClient;
-    private final Duration emitterTimeout;
     private final Duration heartbeatInterval;
+    private final Supplier<SseEmitter> emitterFactory;
 
     @Autowired
     public ChatSseService(ChatClient chatClient, AiProperties properties) {
@@ -59,24 +63,34 @@ public class ChatSseService {
     }
 
     ChatSseService(ChatClient chatClient, Duration emitterTimeout, Duration heartbeatInterval) {
+        this(chatClient, emitterTimeout, heartbeatInterval,
+                () -> new SseEmitter(emitterTimeout.toMillis()));
+    }
+
+    ChatSseService(ChatClient chatClient, Duration emitterTimeout, Duration heartbeatInterval,
+                   Supplier<SseEmitter> emitterFactory) {
         this.chatClient = chatClient;
-        this.emitterTimeout = emitterTimeout;
         this.heartbeatInterval = heartbeatInterval;
+        this.emitterFactory = emitterFactory;
     }
 
     public SseEmitter stream(ChatRequest request) {
         String requestId = UUID.randomUUID().toString();
-        SseEmitter emitter = new SseEmitter(emitterTimeout.toMillis());
-        SseSender sender = new SseSender(emitter);
+        SseEmitter emitter = emitterFactory.get();
 
         AtomicBoolean cancelled = new AtomicBoolean(false);
+        AtomicBoolean completedNormally = new AtomicBoolean(false);
         AtomicBoolean deltaSent = new AtomicBoolean(false);
         AtomicReference<ChatStream> streamRef = new AtomicReference<>();
         AtomicReference<FinishReason> finishReason = new AtomicReference<>();
         AtomicReference<ChatUsage> usage = new AtomicReference<>(ChatUsage.empty());
+        SseSender sender = new SseSender(emitter, cancelled);
 
         Runnable cancel = () -> {
-            cancelled.set(true);
+            if (completedNormally.get()) {
+                return;
+            }
+            sender.cancel();
             closeQuietly(streamRef.get());
         };
         emitter.onCompletion(cancel);
@@ -89,14 +103,18 @@ public class ChatSseService {
             }
             try {
                 sender.send(SseEmitter.event().comment("ping"));
-            } catch (IOException | RuntimeException e) {
+            } catch (IOException e) {
                 cancel.run();
             }
         }, heartbeatInterval.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
 
         try {
-            sender.send(SseEmitter.event().name("start")
-                    .data(new SseEvents.Start(requestId), MediaType.APPLICATION_JSON));
+            if (!sender.send(SseEmitter.event().name("start")
+                    .data(new SseEvents.Start(requestId), MediaType.APPLICATION_JSON))) {
+                heartbeat.cancel(false);
+                sender.complete();
+                return emitter;
+            }
         } catch (IOException e) {
             heartbeat.cancel(false);
             sender.complete();
@@ -112,8 +130,10 @@ public class ChatSseService {
                     ChatChunk chunk = stream.next();
                     if (chunk.hasContent()) {
                         deltaSent.set(true);
-                        sender.send(SseEmitter.event().name("delta")
-                                .data(new SseEvents.Delta(chunk.contentDelta()), MediaType.APPLICATION_JSON));
+                        if (!sender.send(SseEmitter.event().name("delta")
+                                .data(new SseEvents.Delta(chunk.contentDelta()), MediaType.APPLICATION_JSON))) {
+                            return;
+                        }
                     }
                     if (chunk.finishReason() != null) {
                         finishReason.set(chunk.finishReason());
@@ -127,13 +147,18 @@ public class ChatSseService {
                 }
                 FinishReason reason = finishReason.get();
                 if (reason == FinishReason.INSUFFICIENT_RESOURCE || reason == FinishReason.ABORTED) {
-                    sendError(sender, ErrorCode.AI_UPSTREAM_ERROR, AiErrorType.UPSTREAM_ERROR,
-                            deltaSent.get(), requestId);
-                } else {
-                    sender.send(SseEmitter.event().name("done")
-                            .data(new SseEvents.Done(reason == null ? "UNKNOWN" : reason.name(), usage.get()),
-                                    MediaType.APPLICATION_JSON));
+                    if (!sendError(sender, ErrorCode.AI_UPSTREAM_ERROR, AiErrorType.UPSTREAM_ERROR,
+                            deltaSent.get(), requestId)) {
+                        sender.complete();
+                        return;
+                    }
+                } else if (!sender.send(SseEmitter.event().name("done")
+                        .data(new SseEvents.Done(reason == null ? "UNKNOWN" : reason.name(), usage.get()),
+                                MediaType.APPLICATION_JSON))) {
+                    sender.complete();
+                    return;
                 }
+                completedNormally.set(true);
                 sender.complete();
             } catch (AiException e) {
                 log.warn("SSE 转发失败: requestId={}, type={}, provider={}, status={}",
@@ -145,13 +170,28 @@ public class ChatSseService {
                         cancelled.set(true);
                     }
                 }
+                if (!cancelled.get()) {
+                    completedNormally.set(true);
+                }
                 sender.complete();
             } catch (IOException e) {
+                // 写失败 = 客户端已经断开，不再尝试发 error。
                 cancel.run();
                 sender.complete();
             } catch (RuntimeException e) {
-                log.debug("SSE 写入失败: requestId={}", requestId, e);
-                cancel.run();
+                // 上游/程序异常：客户端还在，就要发 error；与写失败区分开。
+                log.warn("SSE 上游或程序异常: requestId={}", requestId, e);
+                if (!cancelled.get()) {
+                    try {
+                        sendError(sender, ErrorCode.AI_UPSTREAM_ERROR, AiErrorType.UPSTREAM_ERROR,
+                                deltaSent.get(), requestId);
+                    } catch (IOException ignored) {
+                        cancelled.set(true);
+                    }
+                }
+                if (!cancelled.get()) {
+                    completedNormally.set(true);
+                }
                 sender.complete();
             } finally {
                 heartbeat.cancel(false);
@@ -162,9 +202,9 @@ public class ChatSseService {
         return emitter;
     }
 
-    private void sendError(SseSender sender, ErrorCode code, AiErrorType type,
-                           boolean partial, String requestId) throws IOException {
-        sender.send(SseEmitter.event().name("error")
+    private boolean sendError(SseSender sender, ErrorCode code, AiErrorType type,
+                              boolean partial, String requestId) throws IOException {
+        return sender.send(SseEmitter.event().name("error")
                 .data(new SseEvents.Error(code.getCode(), type.name(), messageFor(type), partial, requestId),
                         MediaType.APPLICATION_JSON));
     }
@@ -198,21 +238,40 @@ public class ChatSseService {
 
     /**
      * SseEmitter.send 的串行化封装：心跳线程和转发线程不会同时写。
+     *
+     * <p>取消状态与 send 共用同一把锁：cancel 置位后，已通过 hasNext 的那一个 delta
+     * 也会在 send 入口被拒绝。
      */
-    private static final class SseSender {
+    static final class SseSender {
 
         private final SseEmitter emitter;
+        private final AtomicBoolean cancelled;
 
-        private SseSender(SseEmitter emitter) {
+        SseSender(SseEmitter emitter, AtomicBoolean cancelled) {
             this.emitter = emitter;
+            this.cancelled = cancelled;
         }
 
-        private synchronized void send(SseEmitter.SseEventBuilder event) throws IOException {
-            emitter.send(event);
+        synchronized boolean send(SseEmitter.SseEventBuilder event) throws IOException {
+            if (cancelled.get()) {
+                return false;
+            }
+            try {
+                emitter.send(event);
+                return true;
+            } catch (IOException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                throw new IOException("SSE 写入失败", e);
+            }
         }
 
-        private synchronized void complete() {
+        synchronized void complete() {
             emitter.complete();
+        }
+
+        synchronized void cancel() {
+            cancelled.set(true);
         }
     }
 }

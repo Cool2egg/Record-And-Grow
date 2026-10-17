@@ -52,9 +52,14 @@ public final class StreamWatchdog implements AutoCloseable {
         this.future = SCHEDULER.scheduleAtFixedRate(this::check, tickMillis, tickMillis, TimeUnit.MILLISECONDS);
     }
 
-    /** 收到任意一行（包括 keep-alive 注释）时调用。 */
-    public void activity() {
-        lastActivity = System.nanoTime();
+    /**
+     * 收到任意 SSE 行（含 keep-alive 注释）时调用，传入该行到达的时间戳。
+     * 只前进不后退，避免旧时间戳把 deadline 拉回去。
+     */
+    public void activity(long nanoTime) {
+        if (nanoTime > lastActivity) {
+            lastActivity = nanoTime;
+        }
     }
 
     /** 收到第一段正文时调用。 */
@@ -73,7 +78,8 @@ public final class StreamWatchdog implements AutoCloseable {
             return;
         }
         long now = System.nanoTime();
-        boolean idle = now - lastActivity > idleNanos;
+        // idle 只在首包之后生效；首包之前只看 first-token，避免 idle < first-token 时误杀。
+        boolean idle = firstContent != 0 && now - lastActivity > idleNanos;
         boolean noFirstContent = firstContent == 0 && now - startedAt > firstTokenNanos;
         boolean total = now - startedAt > totalNanos;
         if (idle || noFirstContent || total) {

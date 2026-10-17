@@ -611,7 +611,7 @@ SSE 里额外带 `errorType`（如 `RATE_LIMITED`）和 `partial`（是否已发
 
 ### 10.1 已完成的验证（沙箱）
 
-- `mvn -Dtest='!*IntegrationTest' test`：54 个测试通过，覆盖非流式成功、401/400/429/500 映射、SSE 正常/断流/超时、主备降级、Embedding 分批与 index 排序、SSE 自检接口、参数校验。[实测·沙箱]
+- `mvn -Dtest='!*IntegrationTest' test`：62 个测试通过，覆盖非流式成功、401/400/429/500 映射、SSE 正常/断流/超时、取消竞态、idle 续命、无 `[DONE]` 的 EOF、主备降级、Embedding 分批与 index 排序、SSE 自检接口、参数校验。[实测·沙箱]
 - `mvn -DskipTests compile`：编译通过。[实测·沙箱]
 - 未运行 `TimelineEntryIntegrationTest`：沙箱没有 Docker，Testcontainers 起不了 PostgreSQL。[实测·沙箱]
 - 未调用真实 DeepSeek / Qwen API：没有真实 key，全部用 WireMock。[实测·沙箱]
@@ -629,3 +629,11 @@ SSE 里额外带 `errorType`（如 `RATE_LIMITED`）和 `partial`（是否已发
 - 配好 `DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY` 后的真实调用。
 - `curl -N` 的 SSE 实时性、Ctrl+C 取消、代理下的心跳。
 - 真实停库时的 500/503 与 `?page=abc` 仍是模块二遗留，不在本模块修复。
+
+### 10.4 2026-10-17 流式缺陷修复（第二轮）
+
+- **取消竞态**：`JdkChatStream` 增加独立 `cancelled` 标志（只在 `close()` 置位）；`SseSender` 把取消置位和 `send` 放进同一把锁，`send` 入口再查一次，堵住「`hasNext` 返回 true 后、`send` 前」的窗口；`hasNext` 取消后立即返回 false，不再空转。
+- **活动续命**：`SseEventStream.lastActivityNanos()` 在每个 SSE 行（含 `: keep-alive` 注释）更新；`StreamWatchdog` 的 idle 只在首包后生效，首包前只看 first-token，解决 `idle 30s < first-token 60s` 的矛盾。
+- **干净 EOF**：只有收到 `[DONE]` 才算正常结束；没收到就 EOF 判为 `STREAM_INTERRUPTED`。
+- **RuntimeException 分流**：写失败转成 `IOException`（客户端已断开，不再发 error）；上游/程序异常发 `event:error` 并 `log.warn`。
+- **测试**：62 个非集成测试通过；新增 `closeWhileHasNextBlocked`、`activityResetsIdleTimeout`、`firstTokenNotKilledByIdle`、`eofWithoutDoneIsInterrupted`、`unexpectedRuntimeExceptionSendsError`、`clientDisconnectDoesNotSendError`、`senderRejectsEventsAfterCancel`。

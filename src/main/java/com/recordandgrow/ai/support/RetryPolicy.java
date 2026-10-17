@@ -11,6 +11,10 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class RetryPolicy {
 
+    /**
+     * 单客户端调用（如 embedding）的尝试上限。主备降级时每个 delegate 自己带 maxAttempts，
+     * 这里的值只用于 backoff/pause。
+     */
     private final int maxAttempts;
     private final Duration initialBackoff;
     private final Duration maxBackoff;
