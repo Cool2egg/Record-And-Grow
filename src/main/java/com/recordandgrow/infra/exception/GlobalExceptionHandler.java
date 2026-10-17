@@ -3,6 +3,8 @@ package com.recordandgrow.infra.exception;
 import com.recordandgrow.infra.response.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -34,6 +36,32 @@ public class GlobalExceptionHandler {
         log.warn("参数校验失败: {}", detail);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "参数校验失败: " + detail));
+    }
+
+    /**
+     * 数据库资源获取失败（如连接池拿不到连接、数据库宕机）。
+     *
+     * <p>这类失败是「依赖暂时不可用」，不是程序 bug：返回 503 而非 500，
+     * 与 {@code /api/health} 的语义保持一致，也便于调用方按状态码决定是否重试。
+     * 日志只记 WARN + 消息，不打堆栈——依赖故障是预期内的情况，不应淹没真正的程序错误。
+     */
+    @ExceptionHandler(DataAccessResourceFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataAccessResourceFailure(DataAccessResourceFailureException e) {
+        log.warn("数据库资源不可用: {}", e.getMessage());
+        return ResponseEntity.status(ErrorCode.DB_UNAVAILABLE.getHttpStatus())
+                .body(ApiResponse.error(ErrorCode.DB_UNAVAILABLE));
+    }
+
+    /**
+     * 数据库瞬时故障（如查询超时、并发冲突）。
+     *
+     * <p>瞬时故障重试有意义，同样映射为 503。
+     */
+    @ExceptionHandler(TransientDataAccessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTransientDataAccessException(TransientDataAccessException e) {
+        log.warn("数据库瞬时故障: {}", e.getMessage());
+        return ResponseEntity.status(ErrorCode.DB_UNAVAILABLE.getHttpStatus())
+                .body(ApiResponse.error(ErrorCode.DB_UNAVAILABLE));
     }
 
     @ExceptionHandler(Exception.class)
