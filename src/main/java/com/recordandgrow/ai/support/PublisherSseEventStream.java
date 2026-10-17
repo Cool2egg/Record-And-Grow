@@ -138,7 +138,12 @@ public final class PublisherSseEventStream implements SseEventStream, Flow.Subsc
         String event = data.toString();
         data.setLength(0);
         try {
-            events.put(event);
+            // 有界队列提供背压；带超时的 offer 避免客户端断开后生产线程永久阻塞。
+            while (!closed) {
+                if (events.offer(event, 200, TimeUnit.MILLISECONDS)) {
+                    return;
+                }
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             error = new IOException("SSE 事件队列被中断", e);
