@@ -18,5 +18,21 @@ services:
       timeout: 5s
       retries: 10
 
+  # 数据库版本迁移：应用启动不跑 Flyway（保留「无 DB 可启动」），改由本服务在 compose 启动时执行
+  flyway:
+    image: flyway/flyway:11.15.0
+    container_name: recordandgrow-flyway
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # 迁移脚本：与测试共用同一份建表来源
+      - ./src/main/resources/db/migration:/flyway/sql
+    command:
+      - -url=jdbc:postgresql://postgres:5432/recordandgrow
+      - -user=recordandgrow
+      - -password=recordandgrow
+      - migrate
+
 volumes:
   postgres_data:
