@@ -15,6 +15,10 @@ spring:
       # 探活超时 5 秒，避免数据库不可用时健康检查长时间阻塞
       connection-timeout: 5000
       maximum-pool-size: 5
+  # Flyway 迁移由 docker-compose 的 flyway 服务执行，应用启动时不跑，
+  # 保留「数据库未启动时应用也能启动」；数据库集成测试里用程序化迁移建表。
+  flyway:
+    enabled: false
 
 mybatis-plus:
   configuration:
