@@ -1,5 +1,7 @@
 package com.recordandgrow.infra.exception;
 
+import com.recordandgrow.ai.AiErrorType;
+import com.recordandgrow.ai.AiException;
 import com.recordandgrow.infra.response.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +64,25 @@ public class GlobalExceptionHandler {
         log.warn("数据库瞬时故障: {}", e.getMessage());
         return ResponseEntity.status(ErrorCode.DB_UNAVAILABLE.getHttpStatus())
                 .body(ApiResponse.error(ErrorCode.DB_UNAVAILABLE));
+    }
+
+    /**
+     * AI 调用失败。
+     *
+     * <p>业务码与 HTTP 状态码在这里统一：请求/响应格式问题映射 502，
+     * 网络、限流、超时、鉴权、余额、未配置统一映射 503。
+     * 上游细节只进日志，响应体只给通用文案。
+     */
+    @ExceptionHandler(AiException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAiException(AiException e) {
+        ErrorCode code = switch (e.getType()) {
+            case INVALID_REQUEST, BAD_RESPONSE, STREAM_INTERRUPTED -> ErrorCode.AI_UPSTREAM_ERROR;
+            default -> ErrorCode.AI_UNAVAILABLE;
+        };
+        log.warn("AI 调用失败: type={}, provider={}, status={}, message={}",
+                e.getType(), e.getProvider(), e.getStatusCode(), e.getMessage());
+        return ResponseEntity.status(code.getHttpStatus())
+                .body(ApiResponse.error(code));
     }
 
     @ExceptionHandler(Exception.class)

@@ -22,6 +22,7 @@
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <flyway.version>11.15.0</flyway.version>
         <testcontainers.version>1.21.4</testcontainers.version>
+        <wiremock.version>3.13.1</wiremock.version>
     </properties>
 
     <dependencies>
@@ -94,6 +95,14 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
             <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- 测试：WireMock（模拟 DeepSeek/Qwen 的状态码、延迟、流式分块，不依赖真实 key） -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>${wiremock.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
