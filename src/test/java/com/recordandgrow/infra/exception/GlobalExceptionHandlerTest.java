@@ -3,8 +3,10 @@ package com.recordandgrow.infra.exception;
 import com.recordandgrow.infra.response.ApiResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -51,6 +53,29 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(resp.getBody()).isNotNull();
         assertThat(resp.getBody().getCode()).isEqualTo(ErrorCode.INTERNAL_ERROR.getCode());
+    }
+
+    @Test
+    void shouldHandleDataAccessResourceFailureAsServiceUnavailable() {
+        CannotGetJdbcConnectionException e = new CannotGetJdbcConnectionException("无法获取数据库连接");
+
+        ResponseEntity<ApiResponse<Void>> resp = handler.handleDataAccessResourceFailure(e);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().getCode()).isEqualTo(ErrorCode.DB_UNAVAILABLE.getCode());
+        assertThat(resp.getBody().getMessage()).isEqualTo(ErrorCode.DB_UNAVAILABLE.getMessage());
+    }
+
+    @Test
+    void shouldHandleTransientDataAccessAsServiceUnavailable() {
+        QueryTimeoutException e = new QueryTimeoutException("查询超时");
+
+        ResponseEntity<ApiResponse<Void>> resp = handler.handleTransientDataAccessException(e);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().getCode()).isEqualTo(ErrorCode.DB_UNAVAILABLE.getCode());
     }
 
     private MethodArgumentNotValidException buildValidationException(String field, String message) throws Exception {
