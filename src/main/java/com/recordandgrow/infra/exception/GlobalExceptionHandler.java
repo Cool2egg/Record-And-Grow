@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import java.util.stream.Collectors;
 
@@ -83,6 +84,18 @@ public class GlobalExceptionHandler {
                 e.getType(), e.getProvider(), e.getStatusCode(), e.getMessage());
         return ResponseEntity.status(code.getHttpStatus())
                 .body(ApiResponse.error(code));
+    }
+
+    /**
+     * 客户端已断开（SSE 流式输出时按 Ctrl+C、关页面、网络中断）。
+     *
+     * <p>响应已经提交且不可写，任何回写都注定失败，只会再产生一条
+     * 「Failure in @ExceptionHandler」噪音。这里只记 DEBUG，不返回响应体。
+     * 上游的取消由 {@code ChatSseService} 的 onError/cancel 回调负责，与本处理器无关。
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnected(AsyncRequestNotUsableException e) {
+        log.debug("客户端已断开，忽略: {}", e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
