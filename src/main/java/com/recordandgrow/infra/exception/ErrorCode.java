@@ -14,7 +14,9 @@ public enum ErrorCode {
     BAD_REQUEST(40000, "请求参数错误", HttpStatus.BAD_REQUEST),
     NOT_FOUND(40400, "资源不存在", HttpStatus.NOT_FOUND),
     INTERNAL_ERROR(50000, "系统内部错误", HttpStatus.INTERNAL_SERVER_ERROR),
-    DB_UNAVAILABLE(50300, "数据库不可用", HttpStatus.SERVICE_UNAVAILABLE);
+    DB_UNAVAILABLE(50300, "数据库不可用", HttpStatus.SERVICE_UNAVAILABLE),
+    AI_UNAVAILABLE(50301, "AI 服务暂时不可用", HttpStatus.SERVICE_UNAVAILABLE),
+    AI_UPSTREAM_ERROR(50201, "AI 服务返回异常", HttpStatus.BAD_GATEWAY);
 
     private final int code;
     private final String message;

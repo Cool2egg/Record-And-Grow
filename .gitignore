@@ -28,3 +28,6 @@ logs/
 # ---- 本地环境覆盖配置 ----
 application-local.yml
 application-local.yaml
+.env
+.env.*
+!.env.example

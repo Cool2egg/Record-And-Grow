@@ -30,3 +30,28 @@ mybatis-plus:
 logging:
   level:
     com.recordandgrow: debug
+
+recordandgrow:
+  ai:
+    chat:
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      api-key: ${DEEPSEEK_API_KEY:}
+      model: ${DEEPSEEK_MODEL:deepseek-flash}
+      fallback-model: ${DEEPSEEK_FALLBACK_MODEL:deepseek-v4-pro}
+      fallback-enabled: true
+      thinking: disabled
+      connect-timeout: 5s
+      idle-timeout: 30s
+      first-token-timeout: 60s
+      total-timeout: 180s
+      max-attempts: 2
+      default-max-tokens: 2048
+    embedding:
+      base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${DASHSCOPE_API_KEY:}
+      model: text-embedding-v4
+      dimensions: 1024
+      batch-size: 10
+      connect-timeout: 5s
+      timeout: 30s
+      max-attempts: 2
