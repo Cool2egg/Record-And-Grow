@@ -6,13 +6,12 @@
 
 ## 0. 环境与起点
 
-- 仓库：`D:\RecordAndGrow`（Windows 11，PowerShell）
+- 仓库：`D:\RecordAndGrow`（Windows 11 主机）。**执行环境以实际探测为准**：可能是 Linux 沙箱挂载该目录，也可能是 Windows 本机
+- 开工第一件事：`pwd`、`mvn -v`、`docker info` 各跑一次，结果写进当前步骤的回报。Linux 沙箱里 JDK/Maven 可能是临时装在 `/tmp/tools` 的（会话重启会丢），丢了就重装，不要假设它还在
+- 沙箱能跑：编译、非集成测试、MockMvc。**沙箱不能跑**：Docker / Testcontainers → 集成测试必须交给用户在 Windows 本机执行
 - 技术栈：Java 21 + Spring Boot 4.0.8 + MyBatis-Plus 3.5.17 + PostgreSQL 16（pgvector）+ Flyway
 - **不用** Spring AI / LangChain4j / Lombok / MapStruct；DTO 手写 getter/setter，构造器注入
-- 当前分支：`module/closed-loop`，HEAD = `chore(release): v0.1.0`；模块一到四已全部提交
-- 新分支：从当前 HEAD 切 `module/document-ingest`
-- Docker 可用（Testcontainers 要它）；`mvn` 已配好（3.9.16 + JDK 21），命令见 `docs/dev-environment.md`
-- **受限沙箱里写 `target/`、`.git/`、`src/` 都会被拒**（已有目录缺权限项，新建目录正常）。本任务需要跑 Maven 和 git，**要求用完全权限的会话**；若当前是受限模式，先停下来告诉用户，不要假装跑通
+- 分支：`module/document-ingest`（第 0 步已切好，HEAD = `c801ec7 docs(design): 模块五文档入库设计方案`）
 - **跑不了测试就说跑不了**，写进验证文档；不要声称通过
 
 ---
@@ -204,6 +203,7 @@ docs/prompts/                               对齐与实施提示词
 - 新增/修改文件：<列表>
 - 关键实现：<3–5 条，说明为什么这么做>
 - 测试：<新增几个、覆盖什么>；执行结果：<命令 + 通过数>
+- **需要你在本机执行的命令**：<一条可直接复制的命令 + 期望输出>（沙箱跑不了 Docker 的步骤必须给这条，并说明"本步未验证"）
 - 偏离设计的地方：<没有就写「无」>
 - 遗留问题：<没有就写「无」>
 - 下一步是否可以开始：<是/否 + 原因>
