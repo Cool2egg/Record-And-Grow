@@ -17,14 +17,21 @@ docker info
 通过标准：能打印 Server 版本。
 失败先看：Docker Desktop 是否启动。
 
-## 1. 起数据库
+## 1. 起数据库 + 执行迁移
 
 ```powershell
 docker compose up -d postgres
-docker compose ps
+docker compose up -d flyway
+docker compose logs flyway | Select-String "Migrating|Successfully|ERROR"
+docker exec -it recordandgrow-postgres psql -U recordandgrow -d recordandgrow -c "\dt"
 ```
-通过标准：`recordandgrow-postgres` 为 `healthy`。
-失败先看：5432 端口是否被占用、旧容器是否已存在（`docker compose down` 后重来）。
+
+通过标准：日志出现 `Migrating ... to version 2 - create document`；`\dt` 能看到 `document`、`document_chunk`、`flyway_schema_history`。
+
+> **只起 `postgres` 不够**：应用不跑 Flyway（`spring.flyway.enabled=false`），V2 由 compose 的 `flyway` 服务执行。
+> 漏了这一步，上传会因为 `relation "document" does not exist` 直接 500/50000。
+
+失败先看：5432 端口是否被占用、旧容器是否已存在（`docker compose down` 后重来）；flyway 报校验失败时看 `flyway_schema_history` 里是否已有 V2 记录。
 
 ## 2. pgvector 字符串绑定探针（最先跑，模块唯一的推断点）
 
