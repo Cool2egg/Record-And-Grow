@@ -5,6 +5,16 @@ package com.recordandgrow.ai;
  */
 public interface ChatClient {
 
+    /**
+     * 是否具备调用条件（当前实现只检查 apiKey 是否为空）。
+     *
+     * <p>默认 {@code true}，保证既有实现与测试不需要改动。业务接口在检索前用它
+     * 做预检，避免“先查库、再发现没配 key”。
+     */
+    default boolean isConfigured() {
+        return true;
+    }
+
     ChatResponse complete(ChatRequest request);
 
     /**
