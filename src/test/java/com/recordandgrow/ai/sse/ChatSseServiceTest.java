@@ -24,6 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -151,6 +152,33 @@ class ChatSseServiceTest {
 
         assertThat(emitter.awaitCompletion()).isTrue();
         assertThat(emitter.payloads).noneMatch(payload -> payload.contains("error"));
+    }
+
+    @Test
+    void sendsSourcesBetweenStartAndDelta() throws Exception {
+        chatClient.stream = new FakeStream(List.of(
+                new ChatChunk("a", FinishReason.STOP, null)), 0);
+        RecordingEmitter emitter = new RecordingEmitter();
+        ChatSseService service = new ChatSseService(
+                chatClient, Duration.ofSeconds(5), Duration.ofMillis(500), () -> emitter);
+
+        SseEvents.Sources sources = new SseEvents.Sources(
+                List.of(new SseEvents.SourceItem("T1", "timeline", 1L,
+                        OffsetDateTime.parse("2026-10-18T20:00:00+08:00"), null, "excerpt")),
+                new SseEvents.RetrievalMeta(
+                        OffsetDateTime.parse("2026-10-12T00:00:00+08:00"),
+                        OffsetDateTime.parse("2026-10-19T00:00:00+08:00"),
+                        "RELATIVE_WEEK", false, 1, 1, 1, false, false,
+                        List.of(), false));
+
+        service.stream(chatRequest(), "request-1", sources);
+
+        assertThat(emitter.awaitCompletion()).isTrue();
+        assertThat(emitter.payloads).containsSubsequence(
+                "event:start\ndata:",
+                "event:sources\ndata:",
+                "event:delta\ndata:",
+                "event:done\ndata:");
     }
 
     private static ChatRequest chatRequest() {

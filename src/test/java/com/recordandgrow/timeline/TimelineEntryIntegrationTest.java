@@ -161,6 +161,109 @@ class TimelineEntryIntegrationTest {
                 .isEqualTo(ErrorCode.NOT_FOUND);
     }
 
+    @Test
+    void searchShouldRespectOverlapAndExcludeSoftDeleted() {
+        service.create(request("跑步 5km", dt(14, 7, 0), dt(14, 7, 30)));
+        service.create(request("学习 Java", dt(15, 20, 0), null));
+        TimelineEntryResponse deleted = service.create(request("Go 语言", dt(16, 9, 0), null));
+        service.delete(deleted.getId());
+
+        PageResult<TimelineEntryResponse> result =
+                service.search(dt(14, 0, 0), dt(17, 0, 0), List.of(), 100);
+
+        assertThat(result.getTotal()).isEqualTo(2);
+        assertThat(result.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("学习 Java", "跑步 5km");
+    }
+
+    @Test
+    void searchShouldMatchChineseKeywordAsSubstring() {
+        service.create(request("晚上跑步 5km", dt(14, 20, 0), null));
+        service.create(request("学习 Java 集合", dt(14, 21, 0), null));
+
+        PageResult<TimelineEntryResponse> result =
+                service.search(dt(14, 0, 0), dt(15, 0, 0), List.of("跑步"), 100);
+
+        assertThat(result.getTotal()).isEqualTo(1);
+        assertThat(result.getItems().get(0).getContent()).isEqualTo("晚上跑步 5km");
+    }
+
+    @Test
+    void searchShouldUseWordBoundaryForAsciiKeywords() {
+        service.create(request("Go 语言", dt(14, 9, 0), null));
+        service.create(request("Google Cloud", dt(14, 10, 0), null));
+        service.create(request("Java 集合", dt(14, 11, 0), null));
+        service.create(request("JavaScript 入门", dt(14, 12, 0), null));
+
+        PageResult<TimelineEntryResponse> go =
+                service.search(dt(14, 0, 0), dt(15, 0, 0), List.of("Go"), 100);
+        assertThat(go.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("Go 语言");
+
+        PageResult<TimelineEntryResponse> java =
+                service.search(dt(14, 0, 0), dt(15, 0, 0), List.of("Java"), 100);
+        assertThat(java.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("Java 集合");
+    }
+
+    @Test
+    void searchShouldFallBackToIlikeForSymbolSuffixedAsciiKeywords() {
+        service.create(request("C++ 入门", dt(14, 9, 0), null));
+        service.create(request("C# 入门", dt(14, 10, 0), null));
+
+        PageResult<TimelineEntryResponse> result =
+                service.search(dt(14, 0, 0), dt(15, 0, 0), List.of("C++"), 100);
+
+        assertThat(result.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("C++ 入门");
+    }
+
+    @Test
+    void searchShouldAndMultipleKeywords() {
+        service.create(request("Spring Boot 学习", dt(14, 9, 0), null));
+        service.create(request("Spring 生态", dt(14, 10, 0), null));
+        service.create(request("Boot 配置", dt(14, 11, 0), null));
+
+        PageResult<TimelineEntryResponse> result = service.search(
+                dt(14, 0, 0), dt(15, 0, 0), List.of("Spring", "Boot"), 100);
+
+        assertThat(result.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("Spring Boot 学习");
+    }
+
+    @Test
+    void searchShouldEscapeLikeWildcards() {
+        service.create(request("进度 100% 完成", dt(14, 9, 0), null));
+        service.create(request("进度 1000 完成", dt(14, 10, 0), null));
+        service.create(request("a_b 配置", dt(14, 11, 0), null));
+        service.create(request("axb 配置", dt(14, 12, 0), null));
+
+        PageResult<TimelineEntryResponse> percent =
+                service.search(dt(14, 0, 0), dt(15, 0, 0), List.of("100%"), 100);
+        assertThat(percent.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("进度 100% 完成");
+
+        PageResult<TimelineEntryResponse> underscore =
+                service.search(dt(14, 0, 0), dt(15, 0, 0), List.of("a_b"), 100);
+        assertThat(underscore.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("a_b 配置");
+    }
+
+    @Test
+    void searchShouldApplyLimitAndReportTotal() {
+        service.create(request("第一条", dt(14, 9, 0), null));
+        service.create(request("第二条", dt(14, 10, 0), null));
+        service.create(request("第三条", dt(14, 11, 0), null));
+
+        PageResult<TimelineEntryResponse> result =
+                service.search(dt(14, 0, 0), dt(15, 0, 0), List.of(), 2);
+
+        assertThat(result.getTotal()).isEqualTo(3);
+        assertThat(result.getItems()).hasSize(2);
+        assertThat(result.getItems()).extracting(TimelineEntryResponse::getContent)
+                .containsExactly("第三条", "第二条");
+    }
+
     private List<String> contents(OffsetDateTime start, OffsetDateTime end) {
         PageResult<TimelineEntryResponse> page = service.list(start, end, 1, 100);
         return page.getItems().stream().map(TimelineEntryResponse::getContent).toList();
