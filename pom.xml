@@ -23,6 +23,10 @@
         <flyway.version>11.15.0</flyway.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <wiremock.version>3.13.1</wiremock.version>
+        <jtokkit.version>1.1.0</jtokkit.version>
+        <tika.version>3.3.3</tika.version>
+        <rocketmq.version>5.5.1</rocketmq.version>
+        <netty.version>4.1.130.Final</netty.version>
     </properties>
 
     <dependencies>
@@ -61,6 +65,34 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- 文档解析：Tika 标准解析包（PDF / 纯文本 / Markdown），不引 OCR -->
+        <!-- 3.3.3 是 3.x 最新稳定版；4.x 刚发布，先不冒进 -->
+        <!-- tika-core 在 3.x 里不再由 standard-package 传递进来，必须显式声明 -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-parsers-standard-package</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
+
+        <!-- 分词：切块按 token 计，cl100k_base 纯 Java 实现，无 native 依赖 -->
+        <dependency>
+            <groupId>com.knuddels</groupId>
+            <artifactId>jtokkit</artifactId>
+            <version>${jtokkit.version}</version>
+        </dependency>
+
+        <!-- 消息队列：原生客户端，不用 starter（starter 对 Boot 4 的适配没有依据） -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-client</artifactId>
+            <version>${rocketmq.version}</version>
         </dependency>
 
         <!-- 测试 -->
