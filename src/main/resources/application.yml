@@ -55,3 +55,16 @@ recordandgrow:
       connect-timeout: 5s
       timeout: 30s
       max-attempts: 2
+  chat:
+    timezone: Asia/Shanghai
+    default-window-days: 30
+    max-window-days: 365
+    max-entries: 40
+    max-entry-chars: 500
+    min-entry-chars: 300
+    max-context-chars: 8000
+    max-records-chars: 6000
+    max-question-chars: 2000
+    answer-max-tokens: 1024
+    max-answer-tokens: 4096
+    temperature: 0.3
