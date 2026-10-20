@@ -2,6 +2,7 @@ package com.recordandgrow.infra.exception;
 
 import com.recordandgrow.infra.response.ApiResponse;
 import org.junit.jupiter.api.Test;
+import org.mybatis.spring.MyBatisSystemException;
 import org.springframework.core.MethodParameter;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,9 @@ import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+
+import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -76,6 +80,30 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(resp.getBody()).isNotNull();
         assertThat(resp.getBody().getCode()).isEqualTo(ErrorCode.DB_UNAVAILABLE.getCode());
+    }
+
+    @Test
+    void shouldMapMyBatisConnectionFailureToServiceUnavailable() {
+        MyBatisSystemException e = new MyBatisSystemException(
+                "db down", new SQLTransientConnectionException("Connection refused"));
+
+        ResponseEntity<ApiResponse<Void>> resp = handler.handleMyBatisInfrastructure(e);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().getCode()).isEqualTo(ErrorCode.DB_UNAVAILABLE.getCode());
+    }
+
+    @Test
+    void shouldKeepNonConnectionMyBatisFailureAsInternalError() {
+        MyBatisSystemException e = new MyBatisSystemException(
+                "bad sql", new SQLException("syntax error", "42601"));
+
+        ResponseEntity<ApiResponse<Void>> resp = handler.handleMyBatisInfrastructure(e);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().getCode()).isEqualTo(ErrorCode.INTERNAL_ERROR.getCode());
     }
 
     private MethodArgumentNotValidException buildValidationException(String field, String message) throws Exception {

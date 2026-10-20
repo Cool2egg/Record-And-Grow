@@ -36,9 +36,18 @@ public final class FailoverChatClient implements ChatClient {
     }
 
     @Override
+    public boolean isConfigured() {
+        return delegates.stream().anyMatch(delegate -> delegate.client().isConfigured());
+    }
+
+    @Override
     public ChatResponse complete(ChatRequest request) {
         AiException last = null;
         for (Delegate delegate : delegates) {
+            if (!delegate.client().isConfigured()) {
+                log.debug("跳过未配置的 AI 客户端: client={}", delegate.name());
+                continue;
+            }
             for (int attempt = 1; attempt <= delegate.maxAttempts(); attempt++) {
                 try {
                     return delegate.client().complete(request);
@@ -66,6 +75,10 @@ public final class FailoverChatClient implements ChatClient {
     public ChatStream stream(ChatRequest request) {
         AiException last = null;
         for (Delegate delegate : delegates) {
+            if (!delegate.client().isConfigured()) {
+                log.debug("跳过未配置的 AI 客户端: client={}", delegate.name());
+                continue;
+            }
             for (int attempt = 1; attempt <= delegate.maxAttempts(); attempt++) {
                 try {
                     return delegate.client().stream(request);

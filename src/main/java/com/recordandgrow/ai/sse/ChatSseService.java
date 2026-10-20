@@ -75,7 +75,17 @@ public class ChatSseService {
     }
 
     public SseEmitter stream(ChatRequest request) {
-        String requestId = UUID.randomUUID().toString();
+        return stream(request, UUID.randomUUID().toString(), null);
+    }
+
+    /**
+     * 带来源的流式输出。
+     *
+     * <p>{@code sources} 在 {@code start} 之后、异步任务启动之前同步发送一次，
+     * 因此顺序固定为 {@code start → sources → delta...}；即使后续上游失败，
+     * 客户端也已经拿到来源。传 {@code null} 时行为与旧方法完全一致。
+     */
+    public SseEmitter stream(ChatRequest request, String requestId, SseEvents.Sources sources) {
         SseEmitter emitter = emitterFactory.get();
 
         AtomicBoolean cancelled = new AtomicBoolean(false);
@@ -90,6 +100,7 @@ public class ChatSseService {
             if (completedNormally.get()) {
                 return;
             }
+            log.info("SSE cancelled: requestId={}, deltaSent={}", requestId, deltaSent.get());
             sender.cancel();
             closeQuietly(streamRef.get());
         };
@@ -121,15 +132,34 @@ public class ChatSseService {
             return emitter;
         }
 
+        if (sources != null) {
+            try {
+                if (!sender.send(SseEmitter.event().name("sources")
+                        .data(sources, MediaType.APPLICATION_JSON))) {
+                    heartbeat.cancel(false);
+                    sender.complete();
+                    return emitter;
+                }
+            } catch (IOException e) {
+                heartbeat.cancel(false);
+                sender.complete();
+                return emitter;
+            }
+        }
+
         STREAM_EXECUTOR.execute(() -> {
             MDC.put("requestId", requestId);
+            long startedAt = System.nanoTime();
             try {
                 ChatStream stream = chatClient.stream(request);
                 streamRef.set(stream);
                 while (!cancelled.get() && stream.hasNext()) {
                     ChatChunk chunk = stream.next();
                     if (chunk.hasContent()) {
-                        deltaSent.set(true);
+                        if (!deltaSent.getAndSet(true)) {
+                            log.info("SSE first delta: requestId={}, firstTokenMs={}",
+                                    requestId, elapsedMs(startedAt));
+                        }
                         if (!sender.send(SseEmitter.event().name("delta")
                                 .data(new SseEvents.Delta(chunk.contentDelta()), MediaType.APPLICATION_JSON))) {
                             return;
@@ -158,6 +188,11 @@ public class ChatSseService {
                     sender.complete();
                     return;
                 }
+                ChatUsage doneUsage = usage.get();
+                log.info("SSE done: requestId={}, totalMs={}, finishReason={}, "
+                                + "promptTokens={}, completionTokens={}, totalTokens={}",
+                        requestId, elapsedMs(startedAt), reason == null ? "UNKNOWN" : reason.name(),
+                        doneUsage.promptTokens(), doneUsage.completionTokens(), doneUsage.totalTokens());
                 completedNormally.set(true);
                 sender.complete();
             } catch (AiException e) {
@@ -223,6 +258,10 @@ public class ChatSseService {
             case TIMEOUT -> "AI 服务响应超时";
             default -> "AI 服务暂时不可用";
         };
+    }
+
+    private static long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 
     private static void closeQuietly(ChatStream stream) {

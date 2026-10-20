@@ -49,6 +49,11 @@ public final class DeepSeekChatClient implements ChatClient {
     }
 
     @Override
+    public boolean isConfigured() {
+        return props.getApiKey() != null && !props.getApiKey().isBlank();
+    }
+
+    @Override
     public ChatResponse complete(ChatRequest request) {
         long started = System.nanoTime();
         try {

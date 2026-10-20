@@ -3,17 +3,25 @@ package com.recordandgrow.infra.exception;
 import com.recordandgrow.ai.AiErrorType;
 import com.recordandgrow.ai.AiException;
 import com.recordandgrow.infra.response.ApiResponse;
+import org.apache.ibatis.exceptions.PersistenceException;
+import org.mybatis.spring.MyBatisSystemException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
+import java.net.ConnectException;
+import java.sql.SQLException;
+import java.sql.SQLNonTransientConnectionException;
+import java.sql.SQLTransientConnectionException;
 import java.util.stream.Collectors;
 
 /**
@@ -65,6 +73,49 @@ public class GlobalExceptionHandler {
         log.warn("数据库瞬时故障: {}", e.getMessage());
         return ResponseEntity.status(ErrorCode.DB_UNAVAILABLE.getHttpStatus())
                 .body(ApiResponse.error(ErrorCode.DB_UNAVAILABLE));
+    }
+
+    /**
+     * MyBatis 在连接不可用时会抛出 {@link MyBatisSystemException} / {@link PersistenceException}，
+     * 它们不是 Spring 的 {@link DataAccessResourceFailureException}，不会被上面的处理器捕获。
+     *
+     * <p>只有根因是连接类故障时才映射 503；SQL 语法、约束冲突等程序/数据错误仍然是 500，
+     * 避免把所有 MyBatis 异常都误判成「数据库暂时不可用」。
+     */
+    @ExceptionHandler({MyBatisSystemException.class, PersistenceException.class})
+    public ResponseEntity<ApiResponse<Void>> handleMyBatisInfrastructure(Exception e) {
+        Throwable root = NestedExceptionUtils.getMostSpecificCause(e);
+        if (isConnectionFailure(root) || isConnectionFailure(e)) {
+            log.warn("数据库连接不可用: {}", root.getMessage());
+            return ResponseEntity.status(ErrorCode.DB_UNAVAILABLE.getHttpStatus())
+                    .body(ApiResponse.error(ErrorCode.DB_UNAVAILABLE));
+        }
+        log.error("MyBatis 异常", e);
+        return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.getHttpStatus())
+                .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR));
+    }
+
+    private static boolean isConnectionFailure(Throwable t) {
+        if (t == null) {
+            return false;
+        }
+        if (t instanceof SQLException sql) {
+            String state = sql.getSQLState();
+            if (sql instanceof SQLTransientConnectionException
+                    || sql instanceof SQLNonTransientConnectionException
+                    || (state != null && (state.startsWith("08") || state.startsWith("57P0")))) {
+                return true;
+            }
+        }
+        if (t instanceof CannotGetJdbcConnectionException || t instanceof ConnectException) {
+            return true;
+        }
+        String message = t.getMessage();
+        return message != null && (message.contains("Connection refused")
+                || message.contains("Could not get JDBC Connection")
+                || message.contains("Failed to obtain JDBC Connection")
+                || message.contains("Connection is not available")
+                || message.contains("HikariPool"));
     }
 
     /**
