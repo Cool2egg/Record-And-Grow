@@ -16,4 +16,14 @@ public interface EmbeddingClient {
      * 向量维度，供模块五建表/校验使用。
      */
     int dimensions();
+
+    /**
+     * 是否已配置可用（目前只看 key 是否为空）。
+     *
+     * <p>给「上传前预检」用：未配置就不要落盘、不要建记录。
+     * 默认 true，避免影响其它实现与既有测试；真实客户端按自己的凭据覆写。
+     */
+    default boolean isConfigured() {
+        return true;
+    }
 }

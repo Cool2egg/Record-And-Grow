@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: record-and-grow
+  servlet:
+    multipart:
+      # 比业务上限（recordandgrow.document.max-file-size=10MB）略大，
+      # 让超出 10MB 但没到 12MB 的文件由业务层返回带说明的 413
+      max-file-size: 12MB
+      max-request-size: 13MB
   datasource:
     url: jdbc:postgresql://localhost:5432/recordandgrow
     username: recordandgrow
@@ -68,3 +74,30 @@ recordandgrow:
     answer-max-tokens: 1024
     max-answer-tokens: 4096
     temperature: 0.3
+  document:
+    storage-dir: ./data/documents
+    max-file-size: 10MB
+    allowed-extensions: pdf,md,markdown,txt
+    max-chars: 2000000
+    parse-timeout: 60s
+    queue:
+      # local：直接调 service，无 broker 也能跑；rocketmq：走真实 MQ
+      mode: ${DOCUMENT_QUEUE_MODE:local}
+      namesrv: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+      parse-topic: doc-ingest-parse
+      embed-topic: doc-ingest-embed
+      producer-group: recordandgrow-doc-producer
+      consumer-group-prefix: recordandgrow-doc
+      max-reconsume-times: 3
+      send-timeout: 3s
+    chunk:
+      max-tokens: 400
+      overlap-tokens: 60
+      min-tokens: 20
+      max-chunks: 2000
+      tokenizer: cl100k
+    reconcile:
+      enabled: true
+      interval: 5m
+      stale-after: 10m
+      max-retries: 3

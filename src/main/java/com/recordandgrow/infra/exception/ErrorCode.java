@@ -16,7 +16,12 @@ public enum ErrorCode {
     INTERNAL_ERROR(50000, "系统内部错误", HttpStatus.INTERNAL_SERVER_ERROR),
     DB_UNAVAILABLE(50300, "数据库不可用", HttpStatus.SERVICE_UNAVAILABLE),
     AI_UNAVAILABLE(50301, "AI 服务暂时不可用", HttpStatus.SERVICE_UNAVAILABLE),
-    AI_UPSTREAM_ERROR(50201, "AI 服务返回异常", HttpStatus.BAD_GATEWAY);
+    AI_UPSTREAM_ERROR(50201, "AI 服务返回异常", HttpStatus.BAD_GATEWAY),
+    UNSUPPORTED_MEDIA_TYPE(41500, "不支持的文件类型", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
+    DOCUMENT_PARSE_FAILED(42200, "文档解析失败", HttpStatus.UNPROCESSABLE_ENTITY),
+    DOCUMENT_BUSY(40900, "文档正在处理中", HttpStatus.CONFLICT),
+    PAYLOAD_TOO_LARGE(41300, "文件过大", HttpStatus.PAYLOAD_TOO_LARGE),
+    QUEUE_UNAVAILABLE(50302, "消息队列不可用", HttpStatus.SERVICE_UNAVAILABLE);
 
     private final int code;
     private final String message;

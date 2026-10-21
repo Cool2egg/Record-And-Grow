@@ -17,6 +17,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.net.ConnectException;
 import java.sql.SQLException;
@@ -144,6 +147,35 @@ public class GlobalExceptionHandler {
      * 「Failure in @ExceptionHandler」噪音。这里只记 DEBUG，不返回响应体。
      * 上游的取消由 {@code ChatSseService} 的 onError/cancel 回调负责，与本处理器无关。
      */
+    /**
+     * 上传文件超过 multipart 限制。
+     *
+     * <p>这是 Tomcat/Spring 在进入 controller 之前就抛的，业务层看不到，
+     * 所以必须在这里翻译成 413，否则会落到兜底 500。
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        log.warn("上传文件超过限制: {}", e.getMessage());
+        return ResponseEntity.status(ErrorCode.PAYLOAD_TOO_LARGE.getHttpStatus())
+                .body(ApiResponse.error(ErrorCode.PAYLOAD_TOO_LARGE, "上传文件超过大小限制"));
+    }
+
+    /** multipart 请求本身不合法（边界缺失、格式错误等）。 */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMultipart(MultipartException e) {
+        log.warn("multipart 请求不合法: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "上传请求格式错误"));
+    }
+
+    /** 缺少 file 参数。 */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingPart(MissingServletRequestPartException e) {
+        log.warn("缺少 multipart 参数: {}", e.getRequestPartName());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "缺少参数: " + e.getRequestPartName()));
+    }
+
     @ExceptionHandler(AsyncRequestNotUsableException.class)
     public void handleClientDisconnected(AsyncRequestNotUsableException e) {
         log.debug("客户端已断开，忽略: {}", e.getMessage());

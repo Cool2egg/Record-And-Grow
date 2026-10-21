@@ -70,6 +70,12 @@ public final class QwenEmbeddingClient implements EmbeddingClient {
         return props.getDimensions();
     }
 
+    /** 只判断「有没有配置 key」；key 填错仍然要等真实调用才知道。 */
+    @Override
+    public boolean isConfigured() {
+        return props.getApiKey() != null && !props.getApiKey().isBlank();
+    }
+
     private QwenWire.EmbeddingResponse callBatch(List<String> batch) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", props.getModel());
