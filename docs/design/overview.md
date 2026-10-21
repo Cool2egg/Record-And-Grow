@@ -83,4 +83,4 @@
 - [x] 模块 3：AI 接入
 - [x] 模块 4：最小端到端闭环（非集成测试 120 个；本机 Docker 集成 15/0；3.2–3.6 真实 key/SSE/停库/取消已实测通过）
 - [x] 模块 5：文档入库（沙箱 224 个非集成测试 + 本机集成/curl/MQ 全部通过，2026-10-20；见 `docs/verification/05-document.md`）
-- [x] 模块 6：文档检索接入（双路检索；沙箱非集成 279/0，7 个跳过为无 Docker 的探针/集成用例；本机待跑项见 `docs/verification/06-document-retrieval.md`）
+- [x] 模块 6：文档检索接入（双路检索；2026-10-21 Windows + Docker：非集成 279/0/0、集成 30/0/0、探针 3/0；手工 curl/SSE 与阈值校准待真实 key，见 `docs/verification/06-document-retrieval.md`）
