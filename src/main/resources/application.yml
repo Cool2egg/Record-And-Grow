@@ -74,6 +74,18 @@ recordandgrow:
     answer-max-tokens: 1024
     max-answer-tokens: 4096
     temperature: 0.3
+    # 模块六：文档检索。关掉等价于「不查文档」（documentSearched=false）。
+    documents:
+      enabled: true
+      top-k: 8
+      scan-limit: 24
+      similarity-threshold: 0.25
+      max-per-document: 2
+      max-block-chars: 300
+      max-chars: 2000
+      # 查询向量化按次覆盖 ai.embedding 的 30s / 2 次；首包预算比重试值钱
+      query-timeout: 8s
+      query-max-attempts: 1
   document:
     storage-dir: ./data/documents
     max-file-size: 10MB

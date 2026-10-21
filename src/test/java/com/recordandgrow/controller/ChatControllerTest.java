@@ -15,6 +15,7 @@ import com.recordandgrow.config.ChatProperties;
 import com.recordandgrow.infra.exception.GlobalExceptionHandler;
 import com.recordandgrow.infra.response.PageResult;
 import com.recordandgrow.retrieval.TimelineRetriever;
+import com.recordandgrow.retrieval.document.DocumentRetriever;
 import com.recordandgrow.retrieval.query.KeywordExtractor;
 import com.recordandgrow.retrieval.query.TimeWindowParser;
 import com.recordandgrow.timeline.TimelineEntryService;
@@ -67,12 +68,16 @@ class ChatControllerTest {
 
         ChatProperties properties = new ChatProperties();
         TimelineRetriever retriever = new TimelineRetriever(timelineEntryService);
+        DocumentRetriever documentRetriever = mock(DocumentRetriever.class);
+        when(documentRetriever.retrieve(any())).thenReturn(
+                com.recordandgrow.retrieval.document.DocumentRetrievalResult.notSearched());
         ChatService chatService = new ChatService(
                 chatClient,
                 new ChatSseService(chatClient, new AiProperties()),
                 new TimeWindowParser(properties, CLOCK, ZONE),
                 new KeywordExtractor(),
                 retriever,
+                documentRetriever,
                 new ContextAssembler(properties, ZONE),
                 properties,
                 CLOCK);

@@ -56,8 +56,8 @@
 3. AI 接入：ChatClient / EmbeddingClient + DeepSeek + SSE 流式
 4. 最小端到端闭环：时间线记录 → 检索 → LLM 回答 → SSE 输出
 5. 文档入库：Tika 解析 + 分块 + 向量化写 pgvector
-6. 文档检索接入：时间线 + 文档两路检索（**下一步**）
-7. 知识图谱：Neo4j + LightRAG + 实体关系抽取 + 图检索
+6. 文档检索接入：时间线 + 文档两路检索
+7. 知识图谱：Neo4j + LightRAG + 实体关系抽取 + 图检索（**下一步**）
 8. 意图识别 + 多知识库路由
 9. RRF 融合 + Rerank
 10. 记忆系统：会话记忆 + 摘要 + 记忆三态 + 用户确认流转
@@ -83,3 +83,4 @@
 - [x] 模块 3：AI 接入
 - [x] 模块 4：最小端到端闭环（非集成测试 120 个；本机 Docker 集成 15/0；3.2–3.6 真实 key/SSE/停库/取消已实测通过）
 - [x] 模块 5：文档入库（沙箱 224 个非集成测试 + 本机集成/curl/MQ 全部通过，2026-10-20；见 `docs/verification/05-document.md`）
+- [x] 模块 6：文档检索接入（双路检索；2026-10-21 Windows + Docker：非集成 279/0/0、集成 30/0/0、探针 3/0；手工 curl/SSE 与阈值校准待真实 key，见 `docs/verification/06-document-retrieval.md`）

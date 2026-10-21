@@ -2,8 +2,10 @@ package com.recordandgrow.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 /**
- * 业务对话配置：时间窗、上下文预算、回答长度。
+ * 业务对话配置：时间窗、上下文预算、回答长度、文档检索。
  *
  * <p>与 {@code recordandgrow.ai.*} 分开：AI 配置描述“怎么连模型”，
  * 这里描述“怎么检索、放多少上下文、回答多长”。
@@ -46,6 +48,13 @@ public class ChatProperties {
 
     /** 请求未指定 temperature 时的默认值。 */
     private double temperature = 0.3;
+
+    /** 文档检索参数；与时间线预算共用 {@code max-context-chars}。 */
+    private final Documents documents = new Documents();
+
+    public Documents getDocuments() {
+        return documents;
+    }
 
     public String getTimezone() {
         return timezone;
@@ -141,5 +150,113 @@ public class ChatProperties {
 
     public void setTemperature(double temperature) {
         this.temperature = temperature;
+    }
+
+    /**
+     * 文档检索（模块六）。所有键都有默认值：缺省配置时行为与设计稿一致。
+     *
+     * <p>{@code enabled=false} 等价于「不查文档」：不调 embedding、SQL 不执行，
+     * 对外表现为 {@code documentSearched=false}，与「没有 READY 文档」不可区分。
+     */
+    public static class Documents {
+
+        /** 文档检索总开关。 */
+        private boolean enabled = true;
+
+        /** 最终纳入候选的文档块上限。 */
+        private int topK = 8;
+
+        /** SQL {@code LIMIT}，为阈值/去重留余量，默认 3×topK。 */
+        private int scanLimit = 24;
+
+        /** 相似度阈值；{@code similarity = 1 - cosine_distance}。 */
+        private double similarityThreshold = 0.25;
+
+        /** 同一文档最多纳入几块，防单个文档霸屏。 */
+        private int maxPerDocument = 2;
+
+        /** Prompt 里单个块的字符上限，超出截断。 */
+        private int maxBlockChars = 300;
+
+        /** 文档区字符上限；仍受总预算约束。 */
+        private int maxChars = 2000;
+
+        /** 查询向量化的请求超时，按次覆盖 {@code ai.embedding.timeout}。 */
+        private Duration queryTimeout = Duration.ofSeconds(8);
+
+        /** 查询向量化的尝试次数，按次覆盖 {@code ai.embedding.max-attempts}。 */
+        private int queryMaxAttempts = 1;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getTopK() {
+            return topK;
+        }
+
+        public void setTopK(int topK) {
+            this.topK = topK;
+        }
+
+        public int getScanLimit() {
+            return scanLimit;
+        }
+
+        public void setScanLimit(int scanLimit) {
+            this.scanLimit = scanLimit;
+        }
+
+        public double getSimilarityThreshold() {
+            return similarityThreshold;
+        }
+
+        public void setSimilarityThreshold(double similarityThreshold) {
+            this.similarityThreshold = similarityThreshold;
+        }
+
+        public int getMaxPerDocument() {
+            return maxPerDocument;
+        }
+
+        public void setMaxPerDocument(int maxPerDocument) {
+            this.maxPerDocument = maxPerDocument;
+        }
+
+        public int getMaxBlockChars() {
+            return maxBlockChars;
+        }
+
+        public void setMaxBlockChars(int maxBlockChars) {
+            this.maxBlockChars = maxBlockChars;
+        }
+
+        public int getMaxChars() {
+            return maxChars;
+        }
+
+        public void setMaxChars(int maxChars) {
+            this.maxChars = maxChars;
+        }
+
+        public Duration getQueryTimeout() {
+            return queryTimeout;
+        }
+
+        public void setQueryTimeout(Duration queryTimeout) {
+            this.queryTimeout = queryTimeout;
+        }
+
+        public int getQueryMaxAttempts() {
+            return queryMaxAttempts;
+        }
+
+        public void setQueryMaxAttempts(int queryMaxAttempts) {
+            this.queryMaxAttempts = queryMaxAttempts;
+        }
     }
 }

@@ -97,6 +97,17 @@ public interface DocumentMapper extends BaseMapper<Document> {
     @Update("UPDATE document SET last_progress_at = now() WHERE id = #{id} AND deleted = FALSE")
     int touchProgress(@Param("id") Long id);
 
+    /**
+     * 是否存在可检索的文档（模块六的第一步）。
+     *
+     * <p>没有 READY 文档时整条文档检索路径都不执行：不调查询 embedding、不查 SQL，
+     * 既省一次网络调用，也避免「没文档的用户因为 embedding 抖动被降级」。
+     * 可复用 {@code idx_document_status_progress} 的前缀。
+     */
+    @Select("SELECT EXISTS(SELECT 1 FROM document WHERE deleted = FALSE AND status = 'READY')")
+    boolean existsReady();
+
+
     /** reindex 前的复位：清空处理结果，回到 PENDING。 */
     @Update("""
             UPDATE document

@@ -26,7 +26,6 @@ public final class QwenEmbeddingClient implements EmbeddingClient {
 
     private final AiProperties.Embedding props;
     private final JsonHttpClient http;
-    private final RetryPolicy retryPolicy;
     private final AiCallObserver observer;
     private final URI embeddingUri;
     private final String clientName;
@@ -34,15 +33,24 @@ public final class QwenEmbeddingClient implements EmbeddingClient {
     public QwenEmbeddingClient(AiProperties.Embedding props, ObjectMapper mapper, AiCallObserver observer) {
         this.props = props;
         this.http = new JsonHttpClient("qwen", props.getConnectTimeout(), mapper);
-        this.retryPolicy = new RetryPolicy(props.getMaxAttempts(),
-                Duration.ofMillis(300), Duration.ofSeconds(3), Duration.ofSeconds(5));
         this.observer = observer;
         this.embeddingUri = URI.create(stripTrailingSlash(props.getBaseUrl()) + "/embeddings");
         this.clientName = "qwen/" + props.getModel();
     }
 
+    /** 入库路径：沿用 {@code ai.embedding.timeout} / {@code max-attempts}，行为与模块五一致。 */
     @Override
     public List<float[]> embed(List<String> texts) {
+        return embed(texts, props.getTimeout(), props.getMaxAttempts());
+    }
+
+    /**
+     * 查询路径：超时与尝试次数按次传入（模块六默认 8s / 1 次）。
+     *
+     * <p>连接超时不在按次范围内，仍沿用 {@code ai.embedding.connect-timeout}。
+     */
+    @Override
+    public List<float[]> embed(List<String> texts, Duration timeout, int maxAttempts) {
         if (texts == null || texts.isEmpty()) {
             return List.of();
         }
@@ -51,13 +59,16 @@ public final class QwenEmbeddingClient implements EmbeddingClient {
                 throw new AiException(AiErrorType.INVALID_REQUEST, "texts 不能包含空文本");
             }
         }
+        Duration requestTimeout = timeout == null ? props.getTimeout() : timeout;
+        RetryPolicy policy = new RetryPolicy(maxAttempts,
+                Duration.ofMillis(300), Duration.ofSeconds(3), Duration.ofSeconds(5));
         long started = System.nanoTime();
         int batchSize = Math.max(1, props.getBatchSize());
         List<float[]> vectors = new ArrayList<>(texts.size());
         ChatUsage totalUsage = ChatUsage.empty();
         for (int from = 0; from < texts.size(); from += batchSize) {
             List<String> batch = texts.subList(from, Math.min(from + batchSize, texts.size()));
-            QwenWire.EmbeddingResponse response = callBatch(batch);
+            QwenWire.EmbeddingResponse response = callBatch(batch, requestTimeout, policy);
             vectors.addAll(toVectors(response, batch.size()));
             totalUsage = add(totalUsage, toUsage(response.usage()));
         }
@@ -76,7 +87,7 @@ public final class QwenEmbeddingClient implements EmbeddingClient {
         return props.getApiKey() != null && !props.getApiKey().isBlank();
     }
 
-    private QwenWire.EmbeddingResponse callBatch(List<String> batch) {
+    private QwenWire.EmbeddingResponse callBatch(List<String> batch, Duration timeout, RetryPolicy policy) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", props.getModel());
         body.put("input", batch);
@@ -84,16 +95,16 @@ public final class QwenEmbeddingClient implements EmbeddingClient {
         body.put("encoding_format", "float");
 
         AiException last = null;
-        for (int attempt = 1; attempt <= retryPolicy.maxAttempts(); attempt++) {
+        for (int attempt = 1; attempt <= policy.maxAttempts(); attempt++) {
             try {
                 return http.post(embeddingUri, props.getApiKey(), body,
-                        QwenWire.EmbeddingResponse.class, props.getTimeout());
+                        QwenWire.EmbeddingResponse.class, timeout);
             } catch (AiException e) {
                 last = e;
-                if (!retryPolicy.canRetry(e, attempt)) {
+                if (!policy.canRetry(e, attempt)) {
                     throw e;
                 }
-                retryPolicy.pause(retryPolicy.backoff(e, attempt));
+                policy.pause(policy.backoff(e, attempt));
             }
         }
         throw last == null ? new AiException(AiErrorType.UPSTREAM_ERROR, "Qwen embedding 调用失败") : last;
