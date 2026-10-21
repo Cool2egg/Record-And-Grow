@@ -1,22 +1,30 @@
 # 模块六验证结果（2026-10-21）
 
+> **2026-10-21 补充（Windows + Docker）**：本文件原先只记录了 Linux 沙箱（无 Docker）的结果；
+> 之后在 Windows 会话用 Maven 3.9.16 + JDK 21.0.12 + Docker 29.8.2 实跑了探针、检索集成测试与全量回归。
+> 真实结果见 **§2.3、§3.1.1、§3.2–3.4**；其中两处测试数据/缓存问题已修正，生产代码未因此改动。
+> 手工验收（§4）仍因本会话没有 `DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY` 而未执行。
+
 本文件区分三类内容：
 
-1. **本会话已跑**（Linux 沙箱，JDK 21.0.12 + Maven 3.9.9，**无 Docker**）——贴真实输出；
-2. **交本机执行**（需要 Docker / 真实 key / 运行中的服务）——给可直接复制的命令与期望输出，**不算通过**；
+1. **已跑**（Linux 沙箱 / Windows + Docker）——贴真实输出；
+2. **交本机执行**（需要真实 key / 运行中的服务）——给可直接复制的命令与期望输出，**不算通过**；
 3. **未验证**——明确列出，不写「应该没问题」。
 
 ---
 
 ## 1. 环境与基线
 
-沙箱探测（2026-10-21，分支 `module/doc-retrieval`，切自 `module/document-ingest` / `80fb173`）：
+环境探测分两次（2026-10-21，分支 `module/doc-retrieval`，切自 `module/document-ingest` / `80fb173`）：
 
 ```text
-mvn -v                Apache Maven 3.9.9, Java 21.0.12.1 (Ubuntu)
-docker info           command not found（沙箱无 Docker）
-git status --short    AM docs/learning/05-document-in/learning-notes.md（与本模块无关，未提交）
+Linux 沙箱：mvn 3.9.9 / Java 21.0.12.1；docker: command not found
+Windows  ：mvn 3.9.16 / Java 21.0.12.1；docker 29.8.2（Docker Desktop）
+git status：AM docs/learning/05-document-in/learning-notes.md（与本模块无关，未提交）
 ```
+
+> 本会话的原始沙箱探测是 Linux 无 Docker；上面的 Windows 行是后来补测的，
+> 两套结果都保留，避免把「沙箱能编译」误写成「Docker 已验证」。
 
 基线说明：`module-05` 的验证文档记的是「224/0（Skipped 2）」。本会话实测为
 **226 / 0 fail / Skipped 4**——因为模块五之后又加了 `VectorDistanceProbeTest`（2 个），
@@ -25,7 +33,7 @@ git status --short    AM docs/learning/05-document-in/learning-notes.md（与本
 
 ---
 
-## 2. 本会话已跑：编译与非集成测试
+## 2. Linux 沙箱：编译与非集成测试
 
 ```bash
 mvn -B test-compile
@@ -50,8 +58,8 @@ mvn -B -Dtest='!*IntegrationTest' test
 | `DocumentRetrieverTest` | 28 | 28/0 | 三态、`enabled=false`、空库不调 embedding、无 key → `NOT_CONFIGURED`；10 种 `AiErrorType` 穷举映射 7 种原因；维度/条数异常；阈值；每文档 ≤2；相邻块去重+顺延补位；平局三连排序；topK；`topScore` 取阈值前最高分（全灭时非空、空结果 null）；SQL 异常上抛；两次调用一致；scan-limit 与按次超时透传 |
 | `ContextAssemblerDocumentTest` | 13 | 13/0 | 无文档与模块四逐字一致（messages/sources/promptChars 全等）；降级只多一行且 system 用 A；B 版 system；`D1..Dn` 连续；`items.length == included + documentIncluded == totalIncluded`；空 heading 省略；300 字截断；`\n【问题】` 注入不能伪造段落；文档区满时先丢低分块；**边界「刚好放得下 / 少 1 字符 → 回退 A」**；总预算不超；时间线为空时文档仍可用；固定输入两次一致 |
 | `ChatControllerDocumentTest` | 5 | 5/0 | SSE `start → sources → delta → done`、`sources` 只发一次、T 前 D 后、`type=document` / `id=documentId` / `chunkId` / `title`；非流式 `retrieval` 新字段；降级 200 + `documentsDegraded=true` + 降级文案；无文档时形状与模块四一致；0 命中仍 `documentSearched=true` |
-| `DocumentSearchProbeTest` | 3 | **Skipped** | 真表 + V2 迁移：6.1 SQL 的过滤/排序/LIMIT 正确性 + `EXPLAIN (ANALYZE, BUFFERS)` 打印计划 |
-| `DocumentRetrievalIntegrationTest` | 5 | **未执行**（无 Docker） | 真 MyBatis + pgvector：READY/软删/embedding NULL/model 过滤、`<=>` 排序、scan-limit、平局 tie-break、`existsReady` |
+| `DocumentSearchProbeTest` | 3 | **3/0（Windows + Docker）** | 真表 + V2 迁移：6.1 SQL 的过滤/排序/LIMIT 正确性 + `EXPLAIN (ANALYZE, BUFFERS)` 打印计划 |
+| `DocumentRetrievalIntegrationTest` | 5 | **5/0（Windows + Docker）** | 真 MyBatis + pgvector：READY/软删/embedding NULL/model 过滤、`<=>` 排序、scan-limit、平局 tie-break、`existsReady` |
 
 ### 2.2 旧测试：只改了 1 处
 
@@ -64,34 +72,81 @@ mvn -B -Dtest='!*IntegrationTest' test
 靠的是：旧 `assemble(retrieval, question, now)` 重载、`SourceItem` 6 参构造器、`RetrievalMeta` 11 参构造器、
 `ChatProperties` 原地扩展。
 
+### 2.3 Windows + Docker 实跑结果（2026-10-21）
+
+```text
+mvn -B -Dtest='!*IntegrationTest' test                279 run / 0 fail / 0 skipped
+mvn -B -Dtest=DocumentSearchProbeTest test             3 run / 0 fail / 0 skipped
+mvn -B -Dtest=DocumentRetrievalIntegrationTest test    5 run / 0 fail / 0 skipped
+mvn -B -Dtest='*IntegrationTest' test                 30 run / 0 fail / 0 skipped
+```
+
+`*IntegrationTest` 的 30 个：`DocumentIngestIntegrationTest` 4、`DocumentSchemaIntegrationTest` 6、
+`DocumentRetrievalIntegrationTest` 5、`TimelineEntryIntegrationTest` 15。模块二、五回归全绿。
+
+**验证过程中修正了两处测试问题（生产代码未改）：**
+
+1. `DocumentSearchProbeTest` 初版把种子文档写成 `deleted=true`，且测试 2 的 `document 103` 不存在、
+   `other-model` 放错在 document 而不是 chunk 上；真实 Docker 下分别表现为「只查到 1 行」「FK 违反」「不该出现的 102 被查到」。
+   已修种子为 `deleted=false`、补 `document 103`、把 `other-model` 放到 chunk 的 `embedding_model`。
+2. `DocumentRetrievalIntegrationTest#existsReadyIgnoresNonReadyAndDeleted` 在同一 `@Transactional` 测试里
+   用 `JdbcTemplate` 插入后重复调 `existsReady()`，MyBatis 一级缓存返回旧结果；已加
+   `SqlSessionTemplate.clearCache()` 的 `existsReadyFresh()`。生产每次请求是独立 SqlSession，不受影响。
+
+这两处是测试数据/缓存问题，不是实现偏离；修复后上面的计数才是最终结果。
+
 ---
 
-## 3. 交本机执行（需 Docker）
+## 3. Windows + Docker 实跑（已执行；命令保留用于复跑）
 
-以下命令**本会话无法执行**，不算通过。按「最早暴露问题优先」排序。
+以下命令 2026-10-21 已在 Windows 会话执行，真实结果见 §2.3、§3.1.1、§3.2–3.4。
+保留命令是为了任何机器都能按「最早暴露问题优先」复跑。
 
 ### 3.1 真表探针（先跑这个，读侧 SQL 跑不通就停）
 
+Testcontainers 会自己起 `pgvector/pgvector:pg16`，**不需要**先 `docker compose up -d postgres`；
+只要 Docker daemon 可用即可。
+
 ```bash
-docker compose up -d postgres
 mvn -Dtest=DocumentSearchProbeTest test
 ```
 
-期望：
+期望与实测：
 
 ```text
 Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
 ```
 
 `explainShouldBeRecorded` 会把 `EXPLAIN (ANALYZE, BUFFERS, COSTS)` 的计划逐行打到控制台。
-把输出抄到本文件 §3.1.1，**不做断言**：小表走顺序扫描是合法的。
+实际计划见 §3.1.1，**不做断言**：小表走顺序扫描/普通索引是合法的。
 
 若报 `operator does not exist: vector <=> character varying` 或 `42846`，**停下**，
 不要改成字符串拼 SQL；按设计稿的退化方案（驱动 scope + `PGobject`）另开讨论。
 
 #### 3.1.1 实际执行计划
 
-**未验证**——本会话无 Docker。跑完 3.1 后粘贴到这里。
+2026-10-21 Windows + Docker（pgvector/pgvector:pg16，20 行种子 + 1 个 READY 文档）：
+
+```text
+Limit  (cost=16.34..16.35 rows=1 width=1014) (actual time=0.111..0.113 rows=20 loops=1)
+  Buffers: shared hit=107
+  ->  Sort  (cost=16.34..16.35 rows=1 width=1014) (actual time=0.111..0.112 rows=20 loops=1)
+        Sort Key: ((c.embedding <=> '[...]'::vector)), c.document_id, c.chunk_index, c.id
+        Sort Method: quicksort  Memory: 27kB
+        ->  Nested Loop  (cost=0.28..16.33 rows=1 width=1014) (actual time=0.028..0.097 rows=20 loops=1)
+              ->  Index Scan using idx_document_status_progress on document d
+                    Index Cond: ((status)::text = 'READY'::text)
+                    Filter: (NOT deleted)
+                    Rows Removed by Filter: 1
+              ->  Index Scan using uk_document_chunk_index on document_chunk c
+                    Index Cond: (document_id = d.id)
+                    Filter: ((embedding IS NOT NULL) AND ((embedding_model)::text = 'text-embedding-v4'::text))
+Planning Time: 0.215 ms
+Execution Time: 0.149 ms
+```
+
+**结论**：20 行的小表上，规划器没有选 HNSW，而是 `idx_document_status_progress` + `uk_document_chunk_index` + Sort；
+这是合法计划，不算失败。HNSW 是否被选中要等真实数据量（千级块以上）再看，设计稿已把 `EXPLAIN` 定位为记录项而非断言。
 
 ### 3.2 检索集成测试
 
@@ -99,7 +154,7 @@ Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
 mvn -Dtest=DocumentRetrievalIntegrationTest test
 ```
 
-期望 `Tests run: 5, Failures: 0, Errors: 0, Skipped: 0`。覆盖：READY / 软删 / `PENDING` /
+实测 `Tests run: 5, Failures: 0, Errors: 0, Skipped: 0`。覆盖：READY / 软删 / `PENDING` /
 `embedding IS NULL` / 不同 `embedding_model` 的过滤；`<=>` 距离排序；`LIMIT`；同分按
 `document_id, chunk_index` 的平局顺序；`existsReady` 忽略非 READY 与软删。
 
@@ -109,16 +164,17 @@ mvn -Dtest=DocumentRetrievalIntegrationTest test
 mvn -Dtest='*IntegrationTest' test
 ```
 
-期望全绿，且 `DocumentIngestIntegrationTest`、`DocumentSchemaIntegrationTest`、
-`TimelineEntryIntegrationTest` 的数量与本机模块五验证时一致（入库链路没被改动）。
+实测 `Tests run: 30, Failures: 0, Errors: 0, Skipped: 0`：
+`DocumentIngestIntegrationTest` 4、`DocumentSchemaIntegrationTest` 6、`DocumentRetrievalIntegrationTest` 5、
+`TimelineEntryIntegrationTest` 15。模块二、五回归全绿，入库链路没被改动。
 
-### 3.4 非集成测试（本机，Skipped 应为 0）
+### 3.4 非集成测试（Windows，Skipped=0）
 
 ```bash
 mvn -Dtest='!*IntegrationTest' test
 ```
 
-期望 `279 run / 0 fail / 0 skipped`（本机有 Docker，两个探针类会真跑）。
+实测 `Tests run: 279, Failures: 0, Errors: 0, Skipped: 0`（Docker 可用，两个探针类真跑）。
 
 ---
 
@@ -237,12 +293,14 @@ documentsBudgetTruncated`。
 
 ## 6. 未验证项清单（不写「应该能过」）
 
-1. `DocumentSearchProbeTest` 3 个用例：真表 6.1 SQL 的过滤/排序/`LIMIT`。
-2. **`EXPLAIN (ANALYZE)` 实际计划**（是否选 HNSW、后过滤剩多少行）。
-3. `DocumentRetrievalIntegrationTest` 5 个用例：真 MyBatis 投影映射与 `cast(#{vector} AS vector)`。
-4. `mvn -Dtest='*IntegrationTest' test` 全量回归（模块二、五未被影响）。
-5. 本机 `mvn -Dtest='!*IntegrationTest' test` 的 Skipped=0 结果。
-6. 全部十项手工验收（4.1–4.10）：真实上传、`[D…]` 引用、`type=document`、降级 200、停库 503、SSE 顺序。
-7. **真实 Qwen 向量下的阈值 0.25 是否合适**（本模块只给校准方法，未做评测集）。
-8. 端到端首包延迟（设计稿 13.3 预期：正常 +0.3–0.8s，最坏 8s 后降级）。
-9. 删除/替换 embedding 模型后旧向量被过滤的实际表现（逻辑已由集成测试的 `embedding_model` 过滤覆盖）。
+**已在 Windows + Docker 完成、不再列为未验证的**：真表探针 3/0（计划见 §3.1.1）、
+`DocumentRetrievalIntegrationTest` 5/0、`*IntegrationTest` 30/0、非集成 279/0/0。
+
+仍未验证：
+
+1. 全部十项手工验收（4.1–4.10）：真实上传、`[D…]` 引用、`type=document`、降级 200、停库 503、SSE 顺序。
+   本会话没有 `DEEPSEEK_API_KEY` / `DASHSCOPE_API_KEY`，没有起服务。
+2. **真实 Qwen 向量下的阈值 0.25 是否合适**（本模块只给校准方法，未做评测集）。
+3. 端到端首包延迟（设计稿 13.3 预期：正常 +0.3–0.8s，最坏 8s 后降级）。
+4. 删除/替换 embedding 模型后旧向量被过滤的实际表现（逻辑已由集成测试的 `embedding_model` 过滤覆盖）。
+5. 真实网络下的 SSE 字节流顺序与客户端断开；MockMvc 只覆盖事件顺序与字段，不覆盖网络层。
