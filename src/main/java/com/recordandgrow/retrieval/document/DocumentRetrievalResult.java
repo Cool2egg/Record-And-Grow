@@ -19,13 +19,19 @@ import java.util.List;
  *
  * <p>{@code topScore} 是**阈值过滤前**的最高相似度（空结果为 {@code null}），
  * 供日志与阈值校准使用，不随过滤/配额变化。
+ *
+ * <p>{@code queryEmbeddingMs / documentSqlMs} 只用于日志（设计稿 13.2 的耗时拆分），
+ * 不进 {@code sources}、不影响语义。设计稿第 18 节的结果字段清单没有列这两项，
+ * 但 13.1 要求 {@code ChatService} 的单行日志带上它们，因此放在结果里最自然。
  */
 public record DocumentRetrievalResult(
         List<DocumentHit> hits,
         boolean searched,
         boolean degraded,
         DocumentDegradeReason degradeReason,
-        Double topScore) {
+        Double topScore,
+        long queryEmbeddingMs,
+        long documentSqlMs) {
 
     public DocumentRetrievalResult {
         hits = List.copyOf(hits);
@@ -39,16 +45,26 @@ public record DocumentRetrievalResult(
 
     /** 关闭 / 没有 READY 文档：没调 embedding，SQL 未执行。 */
     public static DocumentRetrievalResult notSearched() {
-        return new DocumentRetrievalResult(List.of(), false, false, null, null);
+        return new DocumentRetrievalResult(List.of(), false, false, null, null, 0, 0);
     }
 
     /** 有 READY 文档但查询 embedding 失败：SQL 未执行，必须有可见标记。 */
     public static DocumentRetrievalResult degraded(DocumentDegradeReason reason) {
-        return new DocumentRetrievalResult(List.of(), false, true, reason, null);
+        return degraded(reason, 0);
+    }
+
+    public static DocumentRetrievalResult degraded(DocumentDegradeReason reason, long queryEmbeddingMs) {
+        return new DocumentRetrievalResult(List.of(), false, true, reason, null, queryEmbeddingMs, 0);
     }
 
     /** SQL 已执行；{@code hits} 为空表示没命中或全部低于阈值。 */
     public static DocumentRetrievalResult of(List<DocumentHit> hits, Double topScore) {
-        return new DocumentRetrievalResult(hits, true, false, null, topScore);
+        return of(hits, topScore, 0, 0);
+    }
+
+    public static DocumentRetrievalResult of(List<DocumentHit> hits, Double topScore,
+                                             long queryEmbeddingMs, long documentSqlMs) {
+        return new DocumentRetrievalResult(hits, true, false, null, topScore,
+                queryEmbeddingMs, documentSqlMs);
     }
 }

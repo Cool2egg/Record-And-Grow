@@ -76,25 +76,33 @@ public class DocumentRetriever {
             return DocumentRetrievalResult.degraded(DocumentDegradeReason.DIMENSION);
         }
 
-        float[] vector;
+        List<float[]> vectors;
+        long embeddingStarted = System.nanoTime();
         try {
-            List<float[]> vectors = embeddingClient.embed(
+            vectors = embeddingClient.embed(
                     List.of(question.trim()), props.getQueryTimeout(), props.getQueryMaxAttempts());
-            if (vectors == null || vectors.size() != 1 || vectors.get(0) == null) {
-                return DocumentRetrievalResult.degraded(DocumentDegradeReason.BAD_RESPONSE);
-            }
-            if (vectors.get(0).length != embeddingClient.dimensions()) {
-                return DocumentRetrievalResult.degraded(DocumentDegradeReason.DIMENSION);
-            }
-            vector = vectors.get(0);
         } catch (AiException e) {
             // 只捕获 AiException：其它 RuntimeException 是 bug，应该 500，不能伪装成降级
-            return DocumentRetrievalResult.degraded(reasonFor(e.getType()));
+            return DocumentRetrievalResult.degraded(reasonFor(e.getType()), elapsedMs(embeddingStarted));
         }
+        long embeddingMs = elapsedMs(embeddingStarted);
+        if (vectors == null || vectors.size() != 1 || vectors.get(0) == null) {
+            return DocumentRetrievalResult.degraded(DocumentDegradeReason.BAD_RESPONSE, embeddingMs);
+        }
+        if (vectors.get(0).length != embeddingClient.dimensions()) {
+            return DocumentRetrievalResult.degraded(DocumentDegradeReason.DIMENSION, embeddingMs);
+        }
+        return search(vectors.get(0), embeddingMs, props);
+    }
 
+    /** SQL 与后续处理；异常不捕获，直接上抛（连接类 → 503，其它 → 500）。 */
+    private DocumentRetrievalResult search(float[] vector, long queryEmbeddingMs,
+                                           ChatProperties.Documents props) {
         int scanLimit = Math.max(1, props.getScanLimit());
+        long sqlStarted = System.nanoTime();
         List<DocumentSearchRow> rows = chunkMapper.search(
                 VectorLiterals.toLiteral(vector), embeddingModel, scanLimit);
+        long documentSqlMs = elapsedMs(sqlStarted);
 
         Double topScore = rows.stream()
                 .map(DocumentSearchRow::getDistance)
@@ -118,7 +126,11 @@ public class DocumentRetriever {
         List<DocumentHit> hits = select(candidates,
                 Math.max(1, props.getTopK()),
                 Math.max(1, props.getMaxPerDocument()));
-        return DocumentRetrievalResult.of(hits, topScore);
+        return DocumentRetrievalResult.of(hits, topScore, queryEmbeddingMs, documentSqlMs);
+    }
+
+    private static long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 
     /** 相似度降序；平局按 documentId / chunkIndex / chunkId，保证两次调用顺序一致。 */
