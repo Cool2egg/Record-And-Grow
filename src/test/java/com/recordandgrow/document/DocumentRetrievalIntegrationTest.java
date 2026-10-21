@@ -2,6 +2,7 @@ package com.recordandgrow.document;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -62,6 +63,9 @@ class DocumentRetrievalIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private SqlSessionTemplate sqlSessionTemplate;
 
     @Test
     void searchKeepsOnlyReadyActiveEmbeddedRowsOfCurrentModel() {
@@ -129,17 +133,26 @@ class DocumentRetrievalIntegrationTest {
 
     @Test
     void existsReadyIgnoresNonReadyAndDeleted() {
-        assertThat(documentMapper.existsReady()).isFalse();
+        assertThat(existsReadyFresh()).isFalse();
 
         insertDocument("PENDING", false);
         insertDocument("FAILED", false);
-        assertThat(documentMapper.existsReady()).isFalse();
+        assertThat(existsReadyFresh()).isFalse();
 
         insertDocumentReadyButDeleted();
-        assertThat(documentMapper.existsReady()).as("软删的 READY 不算").isFalse();
+        assertThat(existsReadyFresh()).as("软删的 READY 不算").isFalse();
 
         insertDocument("READY", false);
-        assertThat(documentMapper.existsReady()).isTrue();
+        assertThat(existsReadyFresh()).isTrue();
+    }
+
+    /**
+     * JdbcTemplate 的写入不会清 MyBatis 一级缓存；同名查询在同一事务里会读到旧结果。
+     * 生产每次请求是独立 SqlSession，不存在这个问题；测试里必须手工清缓存。
+     */
+    private boolean existsReadyFresh() {
+        sqlSessionTemplate.clearCache();
+        return documentMapper.existsReady();
     }
 
     // ---- helpers ----

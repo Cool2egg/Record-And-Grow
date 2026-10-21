@@ -81,12 +81,13 @@ class DocumentSearchProbeTest {
 
     @Test
     void searchSqlShouldJoinFilterReadyActiveAndModel() throws Exception {
-        insertDocument(100, "DELETED", MODEL, true);
-        insertDocument(101, "PENDING", MODEL, false);
-        insertDocument(102, "READY", "other-model", false);
+        insertDocument(100, "READY", true);
+        insertDocument(101, "PENDING", false);
+        insertDocument(102, "READY", false);
+        insertDocument(103, "READY", false);
         insertChunk(100, 6100, vector(0.99f, 0.02f), MODEL);
         insertChunk(101, 6101, vector(0.99f, 0.02f), MODEL);
-        insertChunk(102, 6102, vector(0.99f, 0.02f), MODEL);
+        insertChunk(102, 6102, vector(0.99f, 0.02f), "other-model");
         insertChunk(103, 6103, null, MODEL);
         insertChunk(103, 6104, vector(0.99f, 0.02f), "other-model");
 
@@ -163,7 +164,7 @@ class DocumentSearchProbeTest {
     // ---- 种子数据：1 个 READY 文档 + 20 个块 ----
 
     private static void seed() throws Exception {
-        long documentId = insertDocument("READY", true);
+        long documentId = insertDocument("READY", false);
         for (int i = 1; i <= 20; i++) {
             float b = i * 0.04f;
             insertChunk(documentId, i, vector(1.0f - b, b), MODEL);
@@ -171,11 +172,11 @@ class DocumentSearchProbeTest {
     }
 
     private static long insertDocument(String status, boolean deleted) throws Exception {
-        return insertDocument(0, status, MODEL, deleted);
+        return insertDocument(0, status, deleted);
     }
 
     /** 用显式 id 建文档，方便在断言里直接引用。 */
-    private static long insertDocument(int id, String status, String model, boolean deleted) throws Exception {
+    private static long insertDocument(int id, String status, boolean deleted) throws Exception {
         String sql = id == 0
                 ? """
                   INSERT INTO document (title, file_name, mime_type, file_size, storage_path, content_sha256,
