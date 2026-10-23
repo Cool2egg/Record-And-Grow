@@ -86,6 +86,99 @@ recordandgrow:
       # 查询向量化按次覆盖 ai.embedding 的 30s / 2 次；首包预算比重试值钱
       query-timeout: 8s
       query-max-attempts: 1
+  # 模块九：精排 + 证据闸门。关闭时融合结果保持 RRF 顺序。
+  # 需要 DASHSCOPE_API_KEY；调用失败只保留原序，不影响主链路。
+  rerank:
+    enabled: ${RERANK_ENABLED:false}
+    base-url: ${RERANK_BASE_URL:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+    api-key: ${DASHSCOPE_API_KEY:}
+    model: ${RERANK_MODEL:gte-rerank-v2}
+    connect-timeout: 2s
+    timeout: 1500ms
+    # 整批最高精排分低于它 → 整批丢弃；换模型必须重新校准
+    min-score: 0.2
+  # 模块九：文档侧融合（向量 + 关键词）。关闭时原样走向量单路，与模块六一致。
+  fusion:
+    enabled: ${FUSION_ENABLED:false}
+    # 候选池只有 20–40 条，用 20 而不是经典 60，否则名次差异被抹平
+    rrf-k: 20
+    candidate-limit: 20
+  # 模块九：关键词通道（Elasticsearch）。默认关闭，关闭时不创建任何 ES Bean。
+  keyword:
+    enabled: ${KEYWORD_ENABLED:false}
+    url: ${ELASTICSEARCH_URL:http://localhost:9200}
+    index-name: recordandgrow-chunk
+    connect-timeout: 2s
+    timeout: 3s
+    top-k: 20
+    # 装了 IK 用 ik_max_word；没装可临时降为 standard 保证能跑起来
+    analyzer: ${KEYWORD_ANALYZER:ik_max_word}
+    search-analyzer: ${KEYWORD_SEARCH_ANALYZER:ik_smart}
+  # 模块八：意图路由。默认关闭——关闭时不做分类，行为与模块六完全一致（两路都查）。
+  # 打开后每次提问多一次小模型调用，分类失败/超时一律回退 BOTH。
+  routing:
+    enabled: ${ROUTING_ENABLED:false}
+    timeout: 1500ms
+    max-question-chars: 500
+  # 模块十二：MCP Server。把只读能力暴露给外部 MCP 客户端，路径 /mcp。
+  mcp:
+    enabled: ${MCP_ENABLED:true}
+    endpoint: /mcp
+    server-name: recordandgrow
+    server-version: 0.9.0
+  # 模块十二：Skills。启动时扫描目录，命中触发词时注入回答 Prompt。
+  skills:
+    enabled: ${SKILLS_ENABLED:true}
+    dir: ${SKILLS_DIR:./skills}
+    max-skills: 2
+  # 模块十一：AgentScope 编排。enabled 只表示允许，没配 DEEPSEEK_API_KEY 时自动回落模块四链路。
+  agent:
+    enabled: ${AGENT_ENABLED:true}
+    research-max-iters: 4
+    research-timeout: 45s
+    answer-timeout: 120s
+    max-evidence-chars: 7000
+    max-evidence-items: 60
+    memory-tools: true
+    graph-tools: true
+    propose-memory: true
+    max-research-notes-chars: 600
+  # 模块七：知识图谱。默认 Postgres；neo4j/lightrag 失败自动回落，启动期不连接外部存储。
+  graph:
+    enabled: ${GRAPH_ENABLED:true}
+    store: ${GRAPH_STORE:postgres}
+    search-limit: 5
+    max-triples-per-document: 40
+    extraction-max-chars: 6000
+    extraction-timeout: 30s
+    reindex-batch: 10
+    neo4j:
+      url: ${NEO4J_URL:http://localhost:7474}
+      database: ${NEO4J_DATABASE:neo4j}
+      username: ${NEO4J_USERNAME:neo4j}
+      password: ${NEO4J_PASSWORD:}
+      timeout: 3s
+    lightrag:
+      url: ${LIGHTRAG_URL:http://localhost:9621}
+      query-path: ${LIGHTRAG_QUERY_PATH:/query}
+      insert-path: ${LIGHTRAG_INSERT_PATH:/documents/text}
+      mode: ${LIGHTRAG_MODE:hybrid}
+      api-key: ${LIGHTRAG_API_KEY:}
+      timeout: 5s
+      max-response-chars: 800
+  # 模块十：会话记忆 + 长期记忆三态。
+  memory:
+    enabled: ${MEMORY_ENABLED:true}
+    history-max-messages: 12
+    history-max-chars: 4000
+    summary-threshold: 20
+    summary-keep: 6
+    summary-max-chars: 800
+    extraction-enabled: ${MEMORY_EXTRACTION_ENABLED:true}
+    extraction-max-candidates: 2
+    pending-max: 50
+    search-limit: 5
+    async-timeout: 20s
   document:
     storage-dir: ./data/documents
     max-file-size: 10MB

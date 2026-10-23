@@ -28,4 +28,12 @@ public record RetrievalResult(
         items = List.copyOf(items);
         keywords = List.copyOf(keywords);
     }
+
+    /**
+     * 未检索：路由判定只查文档时，时间线一路用这个占位，Prompt 里的窗口与计数仍然是真实的。
+     */
+    public static RetrievalResult empty(TimeWindow window, List<String> keywords) {
+        return new RetrievalResult(List.of(), window, 0, 0, false,
+                keywords == null ? List.of() : keywords, false);
+    }
 }

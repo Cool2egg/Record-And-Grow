@@ -93,3 +93,87 @@
 6. **查询 embedding 串行增加首包延迟**
    - 现状：两路串行（时间线 → 文档），每次提问多一次 embedding 调用。正常 +0.3–0.8s；最坏等 8s（`query-timeout`）后降级再开流。
    - 待办：并行检索与异常合并留给模块九的融合层。
+
+## 模块七：知识图谱
+
+1. **Neo4j 只有协议测试；LightRAG 已实机验证**
+   - 现状：`recordandgrow.graph.store=neo4j|lightrag` 可切换，外部存储失败自动回落 Postgres；
+     WireMock 覆盖了 Cypher 请求形状、Basic Auth、LightRAG references 与 500 异常。
+     LightRAG 1.5.7 已实机跑通写入（含 `file_source`）/异步处理/`/query`，并用第二实例
+     `GRAPH_STORE=lightrag` 验证了 reindex + graph/search；Neo4j 真实服务只做了 HTTP/Cypher 冒烟。
+   - 待办：Neo4j 用真实数据跑一次完整 reindex + search。
+
+2. **实体抽取依赖 LLM，且只在 READY 后触发**
+   - 现状：没有 key 时图始终为空；功能上线前已 READY 的文档需要手工 `POST /api/graph/reindex`。
+   - 待办：如需自动补齐，可在启动时跑一次后台 reindex（当前不做，避免启动变慢）。
+
+3. **中文实体匹配用 2 字滑窗，不是切词**
+   - 现状：`GraphRetriever` 对连续汉字做 2 字滑窗，没有接 HanLP / jieba / SmartCN。
+     取舍：图是辅助通道，实体本身是 LLM 抽出的短语，2 字滑窗对未登录词有召回，
+     引入词典或 IK 服务的依赖/启动成本高于收益。
+   - 副作用：停用词噪声、8 个词上限；LightRAG 模式已改为直接传原问题，
+     不受滑窗影响（`GraphStore.search(question, terms, limit)`）。
+   - 待办：图成为主链路时再接 HanLP/SmartCN，或复用 ES IK，并用评测集校准。
+
+## 模块十：记忆系统
+
+1. **摘要与提炼是单实例后台任务**
+   - 现状：共用 2 个 daemon 线程；没有分布式锁。多实例部署时同一会话可能被并发摘要。
+   - 待办：扩容前给摘要/提炼加数据库租约。
+
+2. **提炼质量未系统评估**
+   - 现状：2026-10-23 真实 key 下已验证能产出候选并支持确认/拒绝；但「什么该记、什么不该记」只做了人工抽看。
+   - 待办：用 `eval/` 的样例跑一轮人工标注，统计候选准确率。
+
+3. **记忆检索是子串匹配，不是语义检索**
+   - 现状：`normalized LIKE`。说法不同（「远程办公」vs「在家工作」）召回不到。
+   - 待办：记忆量上来后再考虑 embedding；当前优先低延迟与可解释。
+
+## 模块十一：AgentScope 编排
+
+1. **两段式比单 Agent 多一次模型调用**
+   - 现状：先检索后回答，首包延迟比旧链路高；换来的是 sources 顺序稳定与引用编号稳定。
+   - 待办：若延迟不可接受，可把「检索 Agent 无工具调用」的直接问答短路成单次调用。
+
+2. **检索 Agent 不调工具时不会自动兜底**
+   - 现状：只有检索 Agent 抛异常才回退固定双路；模型「偷懒」直接答时证据为空。
+   - 待办：可在 `toolCalls==0` 且问题长度/意图满足条件时补一次固定检索。
+
+3. **真实 key 只做了基础链路验证**
+   - 现状：2026-10-23 已用真实 key 跑通 `/api/chat`、`/api/chat/stream`、工具调用、记忆提炼、图谱抽取；
+     但没有做稳定性、成本与回答质量评估。
+   - 待办：用 `eval/` 集统计引用准确率、工具调用次数、首包延迟。
+
+4. **SSE 的 sources 在检索完成后才发**
+   - 现状：客户端先收到 `start`，然后要等检索 Agent 跑完才收到 `sources` 与第一个 `delta`。
+   - 待办：可在 `start` 后先发一个 `sources` 占位（`items=[]`），检索完成后再发最终版；但那会破坏「sources 只发一次」的契约，暂不做。
+
+5. **回答可能编造引用编号**
+   - 现状：真实 key 下出现过回答引用 `[G4][G5]`、但本轮 sources 只有 `G1/G2`。
+   - 已做：Prompt 明确「历史编号不能复用、只能用本轮材料编号」；`AgentChatService` 记录
+     `agent answer has unknown citations` WARN，不自动改写答案。
+   - 待办：接评测后做引用校验/重写，或把非法引用替换成「来源不足」提示。
+
+## 模块十二：MCP / Skills
+
+1. **MCP Server 无鉴权**
+   - 现状：`/mcp` 是 stateless、无 token、无租户隔离。
+   - 待办：只监听本机/内网；对外必须加 token、限流与审计。
+
+2. **技能匹配是字面包含**
+   - 现状：`triggers` 子串命中，中文触发词可能过宽（如「总结」）。
+   - 待办：需要更精确时改成「触发词 + 问题意图」双条件，或引入小模型分类。
+
+3. **技能只注入回答 Prompt，不参与工具选择**
+   - 现状：技能不能新增工具或改变检索策略，只能约束输出结构与口吻。
+   - 待办：需要流程型技能时，再接 AgentScope 的 SkillBox。
+
+## 测试与运行环境
+
+1. **Testcontainers 测试默认排除**
+   - 现状：`mvn test` 只跑单测；真库测试需要 `mvn -Pintegration test` 且本机有 Docker。
+   - 待办：CI 上固定跑 integration profile。
+
+2. **没有真实 key 时 `/api/chat` 返回 503**
+   - 现状：`ChatClient.isConfigured()` 只看 key 是否为空；这是预期行为。
+   - 待办：无。

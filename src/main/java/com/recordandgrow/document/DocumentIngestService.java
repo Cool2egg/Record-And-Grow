@@ -12,6 +12,8 @@ import com.recordandgrow.document.chunk.TextNormalizer;
 import com.recordandgrow.document.dto.DocumentChunkResponse;
 import com.recordandgrow.document.dto.DocumentRegisterResult;
 import com.recordandgrow.document.dto.DocumentResponse;
+import com.recordandgrow.document.keyword.KeywordIndexer;
+import com.recordandgrow.graph.GraphIndexer;
 import com.recordandgrow.document.parse.DocumentParser;
 import com.recordandgrow.document.parse.ParsedDocument;
 import com.recordandgrow.document.queue.DocumentIngestQueue;
@@ -22,6 +24,7 @@ import com.recordandgrow.infra.response.PageResult;
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,6 +75,16 @@ public class DocumentIngestService {
     private final DocumentIngestQueue queue;
     private final DocumentProperties properties;
     private final AiProperties aiProperties;
+    /** 关键词索引可选：关闭 keyword.enabled 时容器里没有这个 Bean。 */
+    private final ObjectProvider<KeywordIndexer> keywordIndexer;
+
+    /** 图谱索引可选：由 setter 注入，避免构造函数参数继续膨胀（单测可继续用旧构造）。 */
+    private GraphIndexer graphIndexer;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setGraphIndexer(GraphIndexer graphIndexer) {
+        this.graphIndexer = graphIndexer;
+    }
 
     public DocumentIngestService(DocumentMapper documentMapper,
                                  DocumentChunkMapper chunkMapper,
@@ -82,7 +95,8 @@ public class DocumentIngestService {
                                  EmbeddingClient embeddingClient,
                                  DocumentIngestQueue queue,
                                  DocumentProperties properties,
-                                 AiProperties aiProperties) {
+                                 AiProperties aiProperties,
+                                 ObjectProvider<KeywordIndexer> keywordIndexer) {
         this.documentMapper = documentMapper;
         this.chunkMapper = chunkMapper;
         this.chunkWriter = chunkWriter;
@@ -93,6 +107,7 @@ public class DocumentIngestService {
         this.queue = queue;
         this.properties = properties;
         this.aiProperties = aiProperties;
+        this.keywordIndexer = keywordIndexer;
     }
 
     /**
@@ -193,6 +208,8 @@ public class DocumentIngestService {
 
         // 覆盖式重写：同一文档的重复解析先清空旧块，天然幂等
         chunkMapper.deleteByDocumentId(documentId);
+        // 关键词索引同样要清：重建后 chunkId 会变，旧文档留着就是一对幽灵
+        deleteKeywordIndex(documentId);
         int tokenSum = 0;
         for (Chunk chunk : result.chunks()) {
             DocumentChunk entity = new DocumentChunk();
@@ -250,12 +267,33 @@ public class DocumentIngestService {
             // embedding 调用绝不在事务里
             List<float[]> vectors = embeddingClient.embed(inputs);
             chunkWriter.writeBatch(batch, vectors, model);
+            indexKeywords(current.getTitle(), batch);
             documentMapper.touchProgress(documentId);
         }
 
         int chunkCount = chunkMapper.countByDocumentId(documentId);
         int tokenCount = chunkMapper.sumTokenCount(documentId);
         documentMapper.markReady(documentId, chunkCount, tokenCount);
+        // 图谱是旁路：没有 key 时 GraphIndexer 自己跳过，失败也不影响入库
+        if (graphIndexer != null) {
+            graphIndexer.indexAsync(documentId);
+        }
+    }
+
+    /** 关键词索引可选：没开 ES 时直接跳过，不改变入库语义。 */
+    private void indexKeywords(String title, List<DocumentChunk> batch) {
+        KeywordIndexer indexer = keywordIndexer.getIfAvailable();
+        if (indexer != null) {
+            indexer.indexBatch(title, batch);
+        }
+    }
+
+    /** 删除同理：ES 不可用只记日志，不阻塞文档删除。 */
+    private void deleteKeywordIndex(Long documentId) {
+        KeywordIndexer indexer = keywordIndexer.getIfAvailable();
+        if (indexer != null) {
+            indexer.deleteByDocument(documentId);
+        }
     }
 
     /** 监听器与 local 队列在重试耗尽后调用。 */
@@ -289,6 +327,10 @@ public class DocumentIngestService {
         }
         documentMapper.deleteById(documentId);
         chunkMapper.deleteByDocumentId(documentId);
+        deleteKeywordIndex(documentId);
+        if (graphIndexer != null) {
+            graphIndexer.deleteDocument(documentId);
+        }
         storage.delete(document.getStoragePath());
     }
 

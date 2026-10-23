@@ -2,6 +2,10 @@ package com.recordandgrow.agent;
 
 import com.recordandgrow.agent.dto.ChatAnswerResponse;
 import com.recordandgrow.agent.dto.ChatAskRequest;
+import com.recordandgrow.agent.orchestration.AgentChatService;
+import com.recordandgrow.agent.route.QueryRoute;
+import com.recordandgrow.agent.route.QueryRouter;
+import com.recordandgrow.agent.route.RouteDecision;
 import com.recordandgrow.ai.AiErrorType;
 import com.recordandgrow.ai.AiException;
 import com.recordandgrow.ai.ChatClient;
@@ -14,10 +18,10 @@ import com.recordandgrow.ai.sse.SseEvents;
 import com.recordandgrow.config.ChatProperties;
 import com.recordandgrow.infra.exception.BusinessException;
 import com.recordandgrow.infra.exception.ErrorCode;
+import com.recordandgrow.retrieval.RetrievalBundle;
+import com.recordandgrow.retrieval.RetrievalEngine;
 import com.recordandgrow.retrieval.RetrievalResult;
-import com.recordandgrow.retrieval.TimelineRetriever;
 import com.recordandgrow.retrieval.document.DocumentRetrievalResult;
-import com.recordandgrow.retrieval.document.DocumentRetriever;
 import com.recordandgrow.retrieval.query.KeywordExtractor;
 import com.recordandgrow.retrieval.query.TimeWindow;
 import com.recordandgrow.retrieval.query.TimeWindowParser;
@@ -39,8 +43,8 @@ import java.util.UUID;
  * <p>本模块单轮无状态，不加载历史消息。两路检索都发生在返回 {@link SseEmitter} 之前，
  * 因此无 key / DB 故障都能走正常的 HTTP 错误语义。
  *
- * <p>两路**串行**（时间线在前）：并行要引入线程池、MDC 传播与异常合并，收益不到 1s，
- * 留给模块九的融合层。
+ * <p>两路**并行**（时间线 + 文档，见 {@link RetrievalEngine}），失败语义与串行实现一致：
+ * 两路同时失败时抛时间线的异常，异常类型不包装，全局异常处理器照旧映射。
  */
 @Service
 public class ChatService {
@@ -51,18 +55,29 @@ public class ChatService {
     private final ChatSseService chatSseService;
     private final TimeWindowParser timeWindowParser;
     private final KeywordExtractor keywordExtractor;
-    private final TimelineRetriever timelineRetriever;
-    private final DocumentRetriever documentRetriever;
+    private final QueryRouter queryRouter;
+    private final RetrievalEngine retrievalEngine;
     private final ContextAssembler contextAssembler;
     private final ChatProperties properties;
     private final Clock clock;
+
+    /**
+     * AgentScope 编排（模块十一）。用 setter 注入而不是构造参数：
+     * 保留模块四的构造签名，旧单测不需要跟着改；没引 Agent 时也能独立构造。
+     */
+    private AgentChatService agentChatService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setAgentChatService(AgentChatService agentChatService) {
+        this.agentChatService = agentChatService;
+    }
 
     public ChatService(ChatClient chatClient,
                        ChatSseService chatSseService,
                        TimeWindowParser timeWindowParser,
                        KeywordExtractor keywordExtractor,
-                       TimelineRetriever timelineRetriever,
-                       DocumentRetriever documentRetriever,
+                       QueryRouter queryRouter,
+                       RetrievalEngine retrievalEngine,
                        ContextAssembler contextAssembler,
                        ChatProperties properties,
                        Clock clock) {
@@ -70,14 +85,17 @@ public class ChatService {
         this.chatSseService = chatSseService;
         this.timeWindowParser = timeWindowParser;
         this.keywordExtractor = keywordExtractor;
-        this.timelineRetriever = timelineRetriever;
-        this.documentRetriever = documentRetriever;
+        this.queryRouter = queryRouter;
+        this.retrievalEngine = retrievalEngine;
         this.contextAssembler = contextAssembler;
         this.properties = properties;
         this.clock = clock;
     }
 
     public SseEmitter stream(ChatAskRequest request) {
+        if (useAgent()) {
+            return agentChatService.stream(request);
+        }
         String requestId = UUID.randomUUID().toString();
         try (MDC.MDCCloseable ignored = MDC.putCloseable("requestId", requestId)) {
             PreparedChat prepared = prepare(request, requestId);
@@ -86,6 +104,9 @@ public class ChatService {
     }
 
     public ChatAnswerResponse ask(ChatAskRequest request) {
+        if (useAgent()) {
+            return agentChatService.ask(request);
+        }
         String requestId = UUID.randomUUID().toString();
         try (MDC.MDCCloseable ignored = MDC.putCloseable("requestId", requestId)) {
             PreparedChat prepared = prepare(request, requestId);
@@ -106,8 +127,7 @@ public class ChatService {
         }
     }
 
-    private PreparedChat prepare(ChatAskRequest request, String requestId) {
-        // 1. 预检：没配 key 不查库、不建流
+    private PreparedChat prepare(ChatAskRequest request, String requestId) {        // 1. 预检：没配 key 不查库、不建流
         if (!chatClient.isConfigured()) {
             throw new AiException(AiErrorType.NOT_CONFIGURED, "AI 服务未配置");
         }
@@ -123,18 +143,19 @@ public class ChatService {
         List<String> keywords = keywordExtractor.extract(question);
         OffsetDateTime now = OffsetDateTime.now(clock);
 
-        // 3. 时间线检索
-        long started = System.nanoTime();
-        RetrievalResult retrieval = timelineRetriever.retrieve(window, keywords);
-        long retrievalMs = (System.nanoTime() - started) / 1_000_000;
+        // 3/4. 按路由并行召回（降级不抛；SQL 异常按模块四原则上抛）
+        RouteDecision routeDecision = queryRouter.decide(question);
+        RetrievalBundle retrieved = retrievalEngine.retrieve(
+                question, window, keywords, routeDecision.route());
+        RetrievalResult retrieval = retrieved.timeline();
+        DocumentRetrievalResult documents = retrieved.documents();
+        long retrievalMs = retrieved.timelineMs();
+        long documentRetrievalMs = retrieved.documentMs();
 
-        // 4. 文档检索（降级不抛；SQL 异常按模块四原则上抛）
-        long documentsStarted = System.nanoTime();
-        DocumentRetrievalResult documents = documentRetriever.retrieve(question);
-        long documentRetrievalMs = (System.nanoTime() - documentsStarted) / 1_000_000;
-
-        // 5. 组装 Prompt 与 sources
-        ContextBundle bundle = contextAssembler.assemble(retrieval, documents, question, now);
+        // 5. 组装 Prompt 与 sources；DIRECT 不检索，用最小上下文
+        ContextBundle bundle = routeDecision.route() == QueryRoute.DIRECT
+                ? contextAssembler.assembleDirect(question, now)
+                : contextAssembler.assemble(retrieval, documents, question, now);
 
         // 6. 请求参数
         int cap = Math.max(64, properties.getMaxAnswerTokens());
@@ -157,7 +178,8 @@ public class ChatService {
                         + "budgetTruncated={}, keywordFallback={}, promptChars={}, retrievalMs={}, "
                         + "documentSearched={}, documentsRetrieved={}, documentIncluded={}, "
                         + "documentsDegraded={}, degradeReason={}, queryEmbeddingMs={}, documentSqlMs={}, "
-                        + "documentRetrievalMs={}, topScore={}, documentsBudgetTruncated={}",
+                        + "documentRetrievalMs={}, topScore={}, documentsBudgetTruncated={}, "
+                        + "route={}, routeFallback={}",
                 requestId,
                 question.length(),
                 window.basis(),
@@ -181,7 +203,14 @@ public class ChatService {
                 documents.documentSqlMs(),
                 documentRetrievalMs,
                 formatScore(documents.topScore()),
-                bundle.documentsBudgetTruncated());
+                bundle.documentsBudgetTruncated(),
+                routeDecision.route(),
+                routeDecision.fallback());
+
+        if (routeDecision.fallback()) {
+            // 兜底必须可见：路由失败不是错误，但会改变这次检索的范围
+            log.warn("routing fallback: reason={}, requestId={}", routeDecision.reason(), requestId);
+        }
 
         if (documents.degraded()) {
             // 降级必须可见；只记原因与 requestId，不记问题原文
@@ -192,8 +221,11 @@ public class ChatService {
         return new PreparedChat(chatRequest, bundle);
     }
 
-    /** 日志用：4 位小数；空结果为 {@code null}。 */
-    private static String formatScore(Double score) {
+    private boolean useAgent() {
+        return agentChatService != null && agentChatService.isEnabled();
+    }
+
+    /** 日志用：4 位小数；空结果为 {@code null}。 */    private static String formatScore(Double score) {
         return score == null ? null : String.format(Locale.ROOT, "%.4f", score);
     }
 

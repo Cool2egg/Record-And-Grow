@@ -22,17 +22,21 @@
 
 - **controller**：HTTP 接口入口
 - **ai**：LLM 抽象（自建 ChatClient / EmbeddingClient 接口，HTTP 调 OpenAI 兼容接口）
-- **agent**：编排（意图识别与路由 → 并行检索 → 融合重排 → 组装 prompt → 流式生成 → 记忆提炼）
-- **retrieval**：检索（向量 / 图谱 / 融合重排）
-- **memory**：记忆（会话记忆 + 长期记忆三态）
+- **agent**：编排（意图识别与路由 → 并行检索 → 融合重排 → 组装 prompt → 流式生成 → 记忆提炼）；模块十一起增加 `agent.orchestration`（AgentScope 两段式）
+- **retrieval**：检索（向量 / 关键词 / 图谱 / 融合重排）
+- **memory**：记忆（会话记忆 + 摘要 + 长期记忆三态）
 - **document**：文档（解析 / 分块 / 向量化）
+- **graph**：知识图谱（抽取 / 存储 / 1 跳检索）
 - **timeline**：时间线（用户事实）
+- **mcp / skill**：对外 MCP Server 与 Markdown 技能
 - **infra**：横切基础设施（统一响应 / 统一异常 / 参数校验 / 健康检查）
 - **config**：Bean 装配
 
 **Agent 核心流转**：
 
 接收提问 → 加载会话记忆 → 意图识别 + 路由 → 并行检索多知识源 → RRF 融合 + Rerank → 分类标注组装 prompt → LLM 流式生成带来源回答 → 按需提炼记忆候选落 PENDING → 用户确认转 FACT。
+
+模块十一之后，有 key 时走 AgentScope 两段式：检索 Agent（ReAct + 工具）收集证据 → 回答 Agent 无工具流式作答；无 key / 关闭时回落到上面的固定链路。
 
 ## 4. 数据模型（基础六表）
 
@@ -51,29 +55,30 @@
 
 按硬依赖顺序推进，每个模块是一个可独立提交、可验证、可写一篇学习记录的工作单元：
 
-1. 项目骨架（本模块）
-2. 时间线：timeline_entry 表 + CRUD + 按日期查询
-3. AI 接入：ChatClient / EmbeddingClient + DeepSeek + SSE 流式
-4. 最小端到端闭环：时间线记录 → 检索 → LLM 回答 → SSE 输出
-5. 文档入库：Tika 解析 + 分块 + 向量化写 pgvector
-6. 文档检索接入：时间线 + 文档两路检索
-7. 知识图谱：Neo4j + LightRAG + 实体关系抽取 + 图检索（**下一步**）
-8. 意图识别 + 多知识库路由
-9. RRF 融合 + Rerank
-10. 记忆系统：会话记忆 + 摘要 + 记忆三态 + 用户确认流转
-11. Agent 编排（收口）：完整闭环
-12. ReAct + MCP + Skills
-13. 前端：React 聊天页 / 时间线页 / 记忆页 / 文档页
+1. 项目骨架（✅）
+2. 时间线：timeline_entry 表 + CRUD + 按日期查询（✅）
+3. AI 接入：ChatClient / EmbeddingClient + DeepSeek + SSE 流式（✅）
+4. 最小端到端闭环：时间线记录 → 检索 → LLM 回答 → SSE 输出（✅）
+5. 文档入库：Tika 解析 + 分块 + 向量化写 pgvector（✅）
+6. 文档检索接入：时间线 + 文档两路检索（✅）
+7. 知识图谱：Postgres 图 + 实体关系抽取 + 1 跳检索；Neo4j / LightRAG 可选适配器 + 自动回落（✅，见 `module-07-knowledge-graph.md`）
+8. 意图识别 + 多知识库路由（✅；旧链路 LLM 路由保留，Agent 路径由工具选择取代）
+9. RRF 融合 + Rerank（✅）
+10. 记忆系统：会话记忆 + 摘要 + 记忆三态 + 用户确认流转（✅，见 `module-10-memory.md`）
+11. Agent 编排（收口）：AgentScope 两段式 ReAct + SSE 桥接（✅，见 `module-11-agentscope.md`）
+12. ReAct + MCP + Skills（✅，见 `module-12-mcp-skills.md`）
+13. 前端：React 聊天页 / 时间线页 / 记忆页 / 文档页（⏳ 不在本轮范围）
 
-贯穿线：测试（模块 2 起关键路径测试 + Testcontainers）、可观测（Langfuse 模块 3 后接入）、模型容错降级（模块 3 同步）。
+贯穿线：测试（模块 2 起关键路径测试 + Testcontainers）、可观测（Langfuse 模块 3 后接入）、模型容错降级（模块 3 同步）、评测（独立体系，见 `evaluation.md`，按模块逐步启用）。
 
 ## 6. 技术选型
 
 - Java 21 + Spring Boot 4.0 + Maven
-- 手搓 LLM 接入（不用 Spring AI / LangChain4j）
-- ORM：MyBatis-Plus；存储：PostgreSQL + pgvector + Neo4j + LightRAG
+- 手搓 LLM 接入（不用 Spring AI / LangChain4j）；Agent 编排用 AgentScope Java 2.0.4
+- ORM：MyBatis-Plus；存储：PostgreSQL + pgvector；知识图谱默认 Postgres 两张表，可切 Neo4j / LightRAG，外部存储失败自动回落
 - 文档解析：Apache Tika；流式：SSE；可观测：Langfuse
-- 测试：JUnit 5 + Spring Boot Test + Testcontainers
+- MCP：官方 MCP Java SDK 0.17.2（stateless HTTP）；Skills：Markdown 目录
+- 测试：JUnit 5 + Spring Boot Test + Testcontainers + WireMock
 - 明确不做：模型档位 + 首包探测 + 熔断降级（高并发机制，单用户用不上）
 
 ## 7. 当前进度
@@ -84,3 +89,10 @@
 - [x] 模块 4：最小端到端闭环（非集成测试 120 个；本机 Docker 集成 15/0；3.2–3.6 真实 key/SSE/停库/取消已实测通过）
 - [x] 模块 5：文档入库（沙箱 224 个非集成测试 + 本机集成/curl/MQ 全部通过，2026-10-20；见 `docs/verification/05-document.md`）
 - [x] 模块 6：文档检索接入（双路检索；2026-10-21 Windows + Docker：非集成 279/0/0、集成 30/0/0、探针 3/0；手工 curl/SSE 与阈值校准待真实 key，见 `docs/verification/06-document-retrieval.md`）
+- [x] 模块 7：知识图谱（Postgres 图 + Neo4j/LightRAG 可选适配器 + 自动回落 + Agent 工具；2026-10-22 单测通过，见 `docs/verification/07-12-backend.md`）
+- [x] 模块 8：意图识别与多知识库路由（旧链路 LLM 路由 + Agent 工具选择；单测通过）
+- [x] 模块 9：RRF + Rerank（融合、证据闸门、可选 ES 关键词通道；单测通过）
+- [x] 模块 10：记忆系统（V3 三表 + 会话摘要 + 三态记忆 + 确认接口 + Agent 工具；单测通过）
+- [x] 模块 11：AgentScope 编排（两段式 ReAct + SSE 桥接 + 失败回落；WireMock/单测通过）
+- [x] 模块 12：ReAct + MCP + Skills（`/mcp` stateless Server + `skills/` 热加载；单测与真实 Tomcat 握手通过）
+- [ ] 模块 13：前端（不在本轮范围）

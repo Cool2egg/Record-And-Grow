@@ -14,7 +14,13 @@ import com.recordandgrow.ai.sse.ChatSseService;
 import com.recordandgrow.config.ChatProperties;
 import com.recordandgrow.infra.exception.GlobalExceptionHandler;
 import com.recordandgrow.infra.response.PageResult;
+import com.recordandgrow.agent.route.QueryRouter;
+import com.recordandgrow.config.FusionProperties;
+import com.recordandgrow.config.RerankProperties;
+import com.recordandgrow.config.RoutingProperties;
+import com.recordandgrow.retrieval.RetrievalEngine;
 import com.recordandgrow.retrieval.TimelineRetriever;
+import com.recordandgrow.retrieval.document.DocumentFusionService;
 import com.recordandgrow.retrieval.document.DocumentRetriever;
 import com.recordandgrow.retrieval.query.KeywordExtractor;
 import com.recordandgrow.retrieval.query.TimeWindowParser;
@@ -76,8 +82,13 @@ class ChatControllerTest {
                 new ChatSseService(chatClient, new AiProperties()),
                 new TimeWindowParser(properties, CLOCK, ZONE),
                 new KeywordExtractor(),
-                retriever,
-                documentRetriever,
+                new QueryRouter(chatClient, new RoutingProperties(), Runnable::run),
+                new RetrievalEngine(retriever,
+                        new DocumentFusionService(documentRetriever,
+                                mock(org.springframework.beans.factory.ObjectProvider.class),
+                                mock(org.springframework.beans.factory.ObjectProvider.class),
+                                new FusionProperties(), new RerankProperties(), properties),
+                        Runnable::run),
                 new ContextAssembler(properties, ZONE),
                 properties,
                 CLOCK);

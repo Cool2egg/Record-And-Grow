@@ -71,6 +71,16 @@ public class ContextAssembler {
             8. 不要输出编号以外的引用格式（链接、文件名、页码等）。
             """;
 
+    static final String SYSTEM_PROMPT_DIRECT = """
+            你是 RecordAndGrow 的助手。这条问题不需要检索用户的时间线或文档。
+
+            请遵守：
+            1. 直接、简短地回答；不确定的事实不要编造，也不要假装看过任何记录。
+            2. 如果这个问题其实需要用户自己的经历或上传的资料（例如问“我上周做了什么”“资料里怎么写的”），
+               明确说明需要检索，并请用户把问题问得更具体，不要凭猜测回答。
+            3. 不输出任何引用编号，不要暗示存在来源。
+            """;
+
     static final String DEGRADED_LINE = "【文档检索】本次不可用：以下回答只依据时间线记录，没有检索文档。";
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -157,6 +167,24 @@ public class ContextAssembler {
                 retrieval.retrieved() - selection.items().size(),
                 budgetTruncated,
                 documents.hits().size() > docLines.size());
+    }
+
+    /**
+     * 路由为 DIRECT 时的最小上下文：不检索，只有当前时间与问题。
+     *
+     * <p>sources 为空、检索元信息全零，窗口用 {@code now} 占位——前端据此知道"这次没有来源"。
+     */
+    public ContextBundle assembleDirect(String question, OffsetDateTime now) {
+        String userPrompt = "【当前时间】" + formatTime(now)
+                + "（" + zone.getId() + "）\n\n【问题】\n" + question;
+        List<ChatMessage> messages = List.of(
+                new ChatMessage(ChatMessage.Role.SYSTEM, SYSTEM_PROMPT_DIRECT),
+                new ChatMessage(ChatMessage.Role.USER, userPrompt));
+        SseEvents.Sources sources = new SseEvents.Sources(List.of(),
+                new SseEvents.RetrievalMeta(now, now, TimeBasis.DEFAULT.name(), false,
+                        0, 0, 0, false, false, List.of(), false));
+        return new ContextBundle(messages, sources,
+                SYSTEM_PROMPT_DIRECT.length() + userPrompt.length(), 0, 0, 0, false, false);
     }
 
     /** 模块四原路径；只额外带上文档状态与降级文案，Prompt 其余部分逐字不变。 */

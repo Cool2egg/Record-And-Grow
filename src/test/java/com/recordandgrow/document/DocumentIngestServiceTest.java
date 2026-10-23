@@ -83,7 +83,8 @@ class DocumentIngestServiceTest {
         properties = new DocumentProperties();
         aiProperties = new AiProperties();
         service = new DocumentIngestService(documentMapper, chunkMapper, chunkWriter, storage,
-                parser, chunker, embeddingClient, queue, properties, aiProperties);
+                parser, chunker, embeddingClient, queue, properties, aiProperties,
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class));
     }
 
     // ---------- 注册 ----------
