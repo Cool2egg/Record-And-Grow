@@ -111,19 +111,29 @@ public class DocumentRetriever {
                 .max(Double::compareTo)
                 .orElse(null);
 
-        List<Candidate> candidates = new ArrayList<>(rows.size());
+        List<DocumentHit> candidates = new ArrayList<>(rows.size());
         for (DocumentSearchRow row : rows) {
             if (row.getDistance() == null) {
                 continue;
             }
             double score = 1.0 - row.getDistance();
-            if (score >= props.getSimilarityThreshold()) {
-                candidates.add(new Candidate(row, score));
+            if (score < props.getSimilarityThreshold()) {
+                continue;
             }
+            candidates.add(new DocumentHit(
+                    row.getChunkId(),
+                    row.getDocumentId(),
+                    row.getTitle(),
+                    row.getHeading(),
+                    row.getContent(),
+                    score,
+                    row.getCharStart(),
+                    row.getCharEnd(),
+                    row.getChunkIndex() == null ? -1 : row.getChunkIndex()));
         }
-        candidates.sort(CANDIDATE_ORDER);
+        candidates.sort(HIT_ORDER);
 
-        List<DocumentHit> hits = select(candidates,
+        List<DocumentHit> hits = DocumentSelection.select(candidates,
                 Math.max(1, props.getTopK()),
                 Math.max(1, props.getMaxPerDocument()));
         return DocumentRetrievalResult.of(hits, topScore, queryEmbeddingMs, documentSqlMs);
@@ -134,51 +144,11 @@ public class DocumentRetriever {
     }
 
     /** 相似度降序；平局按 documentId / chunkIndex / chunkId，保证两次调用顺序一致。 */
-    private static final Comparator<Candidate> CANDIDATE_ORDER = Comparator
-            .comparingDouble(Candidate::score).reversed()
-            .thenComparingLong(candidate -> candidate.row().getDocumentId())
-            .thenComparingInt(candidate -> candidate.row().getChunkIndex())
-            .thenComparingLong(candidate -> candidate.row().getChunkId());
-
-    /**
-     * 每文档最多 {@code maxPerDocument} 块；同文档且 {@code |ΔchunkIndex| == 1} 的块只留先到的高分块。
-     *
-     * <p>去重后从候选列表顺延补位：被跳过的相邻块不会让位次空着，直到凑够 {@code topK}。
-     */
-    private static List<DocumentHit> select(List<Candidate> candidates, int topK, int maxPerDocument) {
-        Map<Long, List<Integer>> selectedIndexes = new HashMap<>();
-        Map<Long, Integer> perDocument = new HashMap<>();
-        List<DocumentHit> hits = new ArrayList<>(Math.min(topK, candidates.size()));
-        for (Candidate candidate : candidates) {
-            if (hits.size() >= topK) {
-                break;
-            }
-            DocumentSearchRow row = candidate.row();
-            long documentId = row.getDocumentId();
-            int used = perDocument.getOrDefault(documentId, 0);
-            if (used >= maxPerDocument) {
-                continue;
-            }
-            List<Integer> indexes = selectedIndexes.computeIfAbsent(documentId, key -> new ArrayList<>(2));
-            boolean adjacent = indexes.stream()
-                    .anyMatch(index -> Math.abs(index - row.getChunkIndex()) == 1);
-            if (adjacent) {
-                continue;
-            }
-            indexes.add(row.getChunkIndex());
-            perDocument.put(documentId, used + 1);
-            hits.add(new DocumentHit(
-                    row.getChunkId(),
-                    documentId,
-                    row.getTitle(),
-                    row.getHeading(),
-                    row.getContent(),
-                    candidate.score(),
-                    row.getCharStart(),
-                    row.getCharEnd()));
-        }
-        return List.copyOf(hits);
-    }
+    private static final Comparator<DocumentHit> HIT_ORDER = Comparator
+            .comparingDouble(DocumentHit::score).reversed()
+            .thenComparingLong(hit -> hit.documentId() == null ? Long.MAX_VALUE : hit.documentId())
+            .thenComparingInt(DocumentHit::chunkIndex)
+            .thenComparingLong(hit -> hit.chunkId() == null ? Long.MAX_VALUE : hit.chunkId());
 
     /**
      * 10 种 {@link AiErrorType} 穷举映射到 7 种降级原因。
@@ -197,8 +167,5 @@ public class DocumentRetriever {
             case BAD_RESPONSE -> DocumentDegradeReason.BAD_RESPONSE;
             case NOT_CONFIGURED -> DocumentDegradeReason.NOT_CONFIGURED;
         };
-    }
-
-    private record Candidate(DocumentSearchRow row, double score) {
     }
 }

@@ -14,7 +14,7 @@ import java.time.ZoneId;
  * 避免在业务代码里读 {@code ZoneId.systemDefault()}。
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(ChatProperties.class)
+@EnableConfigurationProperties({ChatProperties.class, FusionProperties.class, RerankProperties.class})
 public class ChatConfig {
 
     @Bean

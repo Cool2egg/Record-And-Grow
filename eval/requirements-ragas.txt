@@ -1,0 +1,5 @@
+# RAGAS 是可选层：不装它，自建指标照样能跑。
+# 装它的时候注意：ragas 依赖较重（会带 datasets、langchain 等），
+# 建议单独建 venv，别污染跑评测用的环境。
+ragas>=0.2
+datasets>=2.20

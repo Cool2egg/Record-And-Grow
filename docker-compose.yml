@@ -61,5 +61,48 @@ services:
     environment:
       JAVA_OPT_EXT: "-Xms512m -Xmx512m -Xmn256m"
 
+  # 关键词通道（模块九）：单节点 ES，关闭安全认证，只给本机用。
+  # 镜像默认装 IK 分词插件；装不上时把 docker/es/Dockerfile 换成 analysis-smartcn，
+  # 同时把 application.yml 的 keyword.analyzer 改成 smartcn。
+  elasticsearch:
+    build:
+      context: ./docker/es
+    container_name: recordandgrow-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # 可选知识图谱存储（默认不用）：docker compose --profile graph up -d neo4j
+  # 启动后：GRAPH_STORE=neo4j NEO4J_PASSWORD=recordandgrow
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: recordandgrow-neo4j
+    profiles: ["graph"]
+    environment:
+      NEO4J_AUTH: neo4j/recordandgrow
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+
 volumes:
   postgres_data:
+  es_data:
+  neo4j_data:

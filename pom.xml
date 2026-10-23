@@ -13,7 +13,7 @@
 
     <groupId>com.recordandgrow</groupId>
     <artifactId>record-and-grow</artifactId>
-    <version>0.1.0</version>
+    <version>0.9.0</version>
     <name>record-and-grow</name>
     <description>个人上下文对话 Agent（学习项目）</description>
 
@@ -27,6 +27,14 @@
         <tika.version>3.3.3</tika.version>
         <rocketmq.version>5.5.1</rocketmq.version>
         <netty.version>4.1.130.Final</netty.version>
+        <!-- 与 docker/es 的镜像版本保持一致；客户端小版本差一个通常也兼容，但统一最省事 -->
+        <elasticsearch.version>8.15.3</elasticsearch.version>
+        <!-- JacksonJsonpMapper 运行时需要一个 JSON-P 实现，官方推荐 parsson -->
+        <parsson.version>1.1.7</parsson.version>
+        <!-- 模块十一：AgentScope Java（ReAct / Toolkit / MCP / Skills / 会话状态） -->
+        <agentscope.version>2.0.4</agentscope.version>
+        <!-- 默认只跑单测；真库/真容器测试用 -Pintegration 打开 -->
+        <test.excludes>**/*IntegrationTest.java</test.excludes>
     </properties>
 
     <dependencies>
@@ -95,6 +103,31 @@
             <version>${rocketmq.version}</version>
         </dependency>
 
+        <!-- 关键词通道：官方 Java 客户端（Jackson 2 由它自带，Boot 4 管的是 Jackson 3，两套共存） -->
+        <dependency>
+            <groupId>co.elastic.clients</groupId>
+            <artifactId>elasticsearch-java</artifactId>
+            <version>${elasticsearch.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.parsson</groupId>
+            <artifactId>parsson</artifactId>
+            <version>${parsson.version}</version>
+        </dependency>
+
+        <!-- AgentScope Java：只引 core + OpenAI 兼容模型扩展（DeepSeek/Qwen 都走 OpenAI 协议）。
+             不引 spring-boot-starter：那套 starter 面向 Boot 3，本项目用 Boot 4，手动装配更可控。 -->
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-core</artifactId>
+            <version>${agentscope.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-model-openai</artifactId>
+            <version>${agentscope.version}</version>
+        </dependency>
+
         <!-- 测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -145,6 +178,26 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- 默认不跑 Testcontainers 测试：没有 Docker 时 mvn test 仍然全绿 -->
+                    <excludes>
+                        <exclude>${test.excludes}</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>integration</id>
+            <properties>
+                <!-- 覆盖默认排除；用一个不存在的模式表示不排除任何测试 -->
+                <test.excludes>**/NoSuchIntegrationTest.java</test.excludes>
+            </properties>
+        </profile>
+    </profiles>
 </project>

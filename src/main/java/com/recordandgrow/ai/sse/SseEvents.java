@@ -13,7 +13,12 @@ public final class SseEvents {
     private SseEvents() {
     }
 
-    public record Start(String requestId) {
+    public record Start(String requestId, Long conversationId) {
+
+        /** 模块四的 1 参构造：无会话（单轮链路）。 */
+        public Start(String requestId) {
+            this(requestId, null);
+        }
     }
 
     /**
@@ -69,14 +74,19 @@ public final class SseEvents {
      * 检索元信息。
      *
      * <p>{@code matched/retrieved/included/limitTruncated/budgetTruncated} 始终是**时间线**口径，
-     * 语义与模块四一致；文档计数单独用 {@code document*} 字段表达。
+     * 语义与模块四一致；文档、记忆、图谱计数单独用各自字段表达。
+     *
+     * <p>不变式：{@code totalIncluded == included + documentIncluded + memoryIncluded + graphIncluded}
+     * 且等于 {@code items.length}。
      *
      * @param documentSearched    文档 SQL 是否真的执行过：降级与未检索为 {@code false}，0 条命中也是 {@code true}
      * @param documentsRetrieved  阈值/配额后的文档块数（≤topK）；降级与未检索为 0
      * @param documentIncluded    最终进 Prompt 的文档块数
-     * @param totalIncluded       {@code included + documentIncluded}
+     * @param totalIncluded       {@code included + documentIncluded + memoryIncluded + graphIncluded}
      * @param documentsDegraded   是否降级；为 {@code true} 时 {@code documentSearched} 必为 {@code false}
      * @param degradeReason       降级原因枚举名；未降级为 {@code null}
+     * @param memoryIncluded      纳入的长期记忆条数（Agent 路径）
+     * @param graphIncluded       纳入的图谱三元组条数（Agent 路径）
      */
     public record RetrievalMeta(
             OffsetDateTime windowStart,
@@ -95,10 +105,36 @@ public final class SseEvents {
             int documentIncluded,
             int totalIncluded,
             boolean documentsDegraded,
-            String degradeReason) {
+            String degradeReason,
+            int memoryIncluded,
+            int graphIncluded) {
 
         public RetrievalMeta {
             keywords = keywords == null ? List.of() : List.copyOf(keywords);
+        }
+
+        /** 模块四/六的 17 参构造：记忆与图谱计数填 0。 */
+        public RetrievalMeta(OffsetDateTime windowStart,
+                             OffsetDateTime windowEnd,
+                             String timeBasis,
+                             boolean clamped,
+                             long matched,
+                             int retrieved,
+                             int included,
+                             boolean limitTruncated,
+                             boolean budgetTruncated,
+                             List<String> keywords,
+                             boolean keywordFallback,
+                             boolean documentSearched,
+                             int documentsRetrieved,
+                             int documentIncluded,
+                             int totalIncluded,
+                             boolean documentsDegraded,
+                             String degradeReason) {
+            this(windowStart, windowEnd, timeBasis, clamped, matched, retrieved, included,
+                    limitTruncated, budgetTruncated, keywords, keywordFallback,
+                    documentSearched, documentsRetrieved, documentIncluded, totalIncluded,
+                    documentsDegraded, degradeReason, 0, 0);
         }
 
         /**

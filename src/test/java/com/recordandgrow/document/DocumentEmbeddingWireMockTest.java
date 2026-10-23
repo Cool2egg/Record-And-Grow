@@ -94,7 +94,8 @@ class DocumentEmbeddingWireMockTest {
                 org.mockito.Mockito.mock(DocumentParser.class),
                 org.mockito.Mockito.mock(Chunker.class),
                 client, org.mockito.Mockito.mock(DocumentIngestQueue.class),
-                new DocumentProperties(), aiProperties);
+                new DocumentProperties(), aiProperties,
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class));
     }
 
     @Test
