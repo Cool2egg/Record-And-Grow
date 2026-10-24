@@ -14,12 +14,9 @@
 
 一个根据你自己的记录和文档来回答问题的对话 Agent。它分得清哪些是你说过的事实、哪些是它的推断，每句话都能点开核对出处。
 
-<!-- 截图待补 1：对话页全貌（首屏主图）
-     要求：1440px 宽；三栏都在（会话 / 正文 / 边注）；回答里至少有一个「时」和一个「文」引用小片，
-     边注里同时出现实心（事实）和空心（推断）标记；检索详情保持收起。
-     保存为 docs/images/chat.png 后删掉本注释，取消下一行的注释。
-![对话页：正文是回答，右侧边注是证据](docs/images/chat.png)
--->
+<p align="center">
+  <img src="docs/images/chat.png" alt="对话页：正文是回答，右侧边注是按来源编号的证据，引用可直接点开原文" width="100%">
+</p>
 
 ## 它做什么
 
@@ -66,13 +63,17 @@
 | 对话 | 流式回答，实时显示检索步骤；引用可点开核对；每轮附检索详情（查了多少、纳入多少、为什么没查到）；可随时停止 |
 | 开放接口 | `/mcp` 把时间线、文档、记忆、图谱四个只读检索工具开放给外部 Agent；`skills/` 下的 Markdown 技能按触发词注入，支持热加载 |
 
-<!-- 截图待补 2：时间线页（列表 + 「记一笔」表单展开态，能看到开始/结束的日期快捷项与时/分输入框，至少一条「进行中」）
-     保存为 docs/images/timeline.png
-截图待补 3：记忆页（左侧待确认至少 2 条且带证据，右侧事实与推断都有内容）
-     保存为 docs/images/memory.png
-     两张都补好后删掉本注释，取消下面两行的注释。
-<img src="docs/images/timeline.png" width="49%" alt="时间线页"> <img src="docs/images/memory.png" width="49%" alt="记忆页">
--->
+<p align="center">
+  <img src="docs/images/timeline-entry.png" width="49%" alt="时间线：记一笔，日期快捷项 + 时/分输入框，可标进行中">
+  <img src="docs/images/timeline-list.png" width="49%" alt="时间线：一天的记录列表，24 小时尺上标出各条记录的位置">
+</p>
+<p align="center">
+  <img src="docs/images/memory-pending.png" width="49%" alt="记忆页：左侧是待确认候选，每条带证据；右侧是已确认的事实与推断">
+  <img src="docs/images/memory-edit.png" width="49%" alt="确认前可以修改措辞，确认后直接落入已确认">
+</p>
+<p align="center">
+  <img src="docs/images/documents.png" width="100%" alt="文档页：上传、处理状态、分块数一览">
+</p>
 
 ## 技术栈
 
