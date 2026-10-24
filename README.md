@@ -58,7 +58,6 @@
 |---|---|
 | 时间线 | 随手记一笔：默认是瞬时事件，也可以填结束时间或标成"进行中"；按天浏览、编辑、删除 |
 | 文档 | 上传 PDF / Markdown / TXT，后台异步解析、分块、向量化，处理状态实时可见；失败可重建索引 |
-| 知识图谱 | 从文档里抽取实体和关系，按实体查一跳关联并跳回出处文档 |
 | 记忆 | 会话内记住最近几轮并滚动摘要；长期记忆分"待确认 / 事实 / 推断"三态，由你确认、修改或拒绝 |
 | 对话 | 流式回答，实时显示检索步骤；引用可点开核对；每轮附检索详情（查了多少、纳入多少、为什么没查到）；可随时停止 |
 | 开放接口 | `/mcp` 把时间线、文档、记忆、图谱四个只读检索工具开放给外部 Agent；`skills/` 下的 Markdown 技能按触发词注入，支持热加载 |
@@ -106,30 +105,6 @@ mvn spring-boot:run                    # 后端 http://localhost:8080
 
 cd frontend && npm install && npm run dev   # 前端 http://localhost:5173
 ```
-
-环境变量开关、Neo4j / LightRAG 接入、同源部署、接口清单和测试命令见 [运行、配置与接口参考](docs/operations.md)。
-
-## 文档
-
-| 内容 | 位置 |
-|---|---|
-| 总体设计 | [docs/design/overview.md](docs/design/overview.md) |
-| 前端设计 | [docs/design/module-13-frontend.md](docs/design/module-13-frontend.md) |
-| 各模块设计 | [docs/design/](docs/design/) |
-| 验证记录 | [docs/verification/](docs/verification/) |
-| 已知问题 | [docs/known-issues.md](docs/known-issues.md) |
-| 评测 | [eval/](eval/README.md) |
-
-### 各模块学习笔记
-
-- 项目骨架：[学习笔记](docs/learning/01-skeleton/learning-notes.md)
-- 时间线：[学习笔记](docs/learning/02-timeline/learning-notes.md)
-- AI 接入：[学习笔记](docs/learning/03-ai/learning-notes.md)
-- 最小端到端闭环：[学习笔记](docs/learning/04-closed-loop/learning-notes.md)
-- 文档入库：[学习笔记](docs/learning/05-document-in/learning-notes.md)
-- 文档检索：[学习笔记](docs/learning/06-doc-retrieval/learning-notes.md)
-- 知识图谱、路由、融合重排、记忆、Agent 编排、MCP 与 Skills：[学习笔记](docs/learning/07-12/learning-notes.md)
-- 前端：[学习笔记](docs/learning/frontend/learning-notes.md)
 
 ## License
 
