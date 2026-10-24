@@ -1,6 +1,7 @@
 package com.recordandgrow.agent.orchestration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.recordandgrow.agent.dto.ChatAnswerResponse;
 import com.recordandgrow.agent.dto.ChatAskRequest;
 import com.recordandgrow.ai.AiErrorType;
@@ -79,7 +80,10 @@ public class AgentChatService {
 
     private static final Logger log = LoggerFactory.getLogger(AgentChatService.class);
 
-    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules()
+            // 与 SSE / HTTP 响应保持一致：时间写 ISO-8601，而不是 epoch 秒。
+            // 历史消息里的 sources 会被前端回放，数字时间会让边注跳到 1970 年。
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     private static final ScheduledExecutorService HEARTBEAT =
             Executors.newScheduledThreadPool(1, runnable -> {
                 Thread thread = new Thread(runnable, "agent-sse-heartbeat");
@@ -163,6 +167,8 @@ public class AgentChatService {
         AgentRun run = newRun(request, question);
         AgentSseSession session = new AgentSseSession(requestId,
                 buildEmitter(), run);
+        // 检索阶段的工具调用一边跑一边把 step 写进 SSE；sources 仍固定在第一个 delta 前
+        run.context.setStepSink(session::sendStep);
         session.startHeartbeat();
         if (!session.sendStart()) {
             session.complete();
@@ -606,6 +612,10 @@ public class AgentChatService {
 
         boolean sendSources(SseEvents.Sources sources) {
             return send("sources", sources);
+        }
+
+        boolean sendStep(SseEvents.Step step) {
+            return send("step", step);
         }
 
         boolean sendDelta(String content) {

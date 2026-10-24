@@ -22,6 +22,24 @@ public final class SseEvents {
     }
 
     /**
+     * 检索过程中的一步（模块十三 §5.1）。
+     *
+     * <p>只描述「调了什么、查到几条、花了多久」，不携带模型思维链或 Prompt。
+     * 顺序约束：全部 {@code step} 都在 {@code sources} 之前发出。
+     *
+     * @param seq   本次请求内递增的序号，从 1 开始
+     * @param tool  工具名，例如 {@code search_timeline}
+     * @param query 工具入参（最多 120 字符）
+     * @param hits  工具返回的条数；失败为 0
+     * @param ok    工具是否成功
+     * @param ms    耗时毫秒
+     * @param error 失败时的简短原因；成功为 {@code null}
+     */
+    public record Step(int seq, String tool, String query, int hits,
+                       boolean ok, long ms, String error) {
+    }
+
+    /**
      * 检索来源。固定在 {@code start} 之后、第一个 {@code delta} 之前发送一次。
      *
      * <p>不变式：{@code items.length == retrieval.included + retrieval.documentIncluded}
@@ -47,9 +65,11 @@ public final class SseEvents {
      * 伪造时间会让文档看起来像用户经历。字段顺序见设计稿 10.1。
      *
      * @param chunkId 文档块 id；时间线为 {@code null}
-     * @param title   文档标题；时间线为 {@code null}
+     * @param title   文档标题；时间线、记忆为 {@code null}（记忆类型见 {@code memoryType}）
      * @param heading 文档面包屑；可能为 {@code null}
-     * @param score   文档相似度（6 位小数）；时间线为 {@code null}
+     * @param score   文档相似度（6 位小数）；记忆为置信度；时间线为 {@code null}
+     * @param memoryType 记忆类型 FACT / INFERRED；非记忆为 {@code null}
+     * @param documentId 图谱边的出处文档 id（可跳详情）；时间线、文档、记忆为 {@code null}
      */
     public record SourceItem(
             String ref,
@@ -61,12 +81,23 @@ public final class SseEvents {
             Long chunkId,
             String title,
             String heading,
-            Double score) {
+            Double score,
+            String memoryType,
+            Long documentId) {
+
+        /** 模块十三之前的 10 参构造：新字段填 {@code null}。 */
+        public SourceItem(String ref, String type, Long id, OffsetDateTime startTime,
+                          OffsetDateTime endTime, String excerpt, Long chunkId, String title,
+                          String heading, Double score) {
+            this(ref, type, id, startTime, endTime, excerpt, chunkId, title, heading, score,
+                    null, null);
+        }
 
         /** 模块四的 6 参构造：新字段填 {@code null}，旧代码与旧测试零改动。 */
         public SourceItem(String ref, String type, Long id, OffsetDateTime startTime,
                           OffsetDateTime endTime, String excerpt) {
-            this(ref, type, id, startTime, endTime, excerpt, null, null, null, null);
+            this(ref, type, id, startTime, endTime, excerpt, null, null, null, null,
+                    null, null);
         }
     }
 

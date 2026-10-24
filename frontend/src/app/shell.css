@@ -1,0 +1,36 @@
+.rail-scrim {
+  display: none;
+}
+
+.rail-spacer {
+  flex: 1;
+}
+
+.rail-note {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.rail-conversations {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 760px) {
+  .rail-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(28, 35, 31, 0.2);
+  }
+
+  .rail-conversations {
+    flex: 0 0 auto;
+  }
+}

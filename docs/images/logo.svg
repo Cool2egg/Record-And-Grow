@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 140" width="300" height="140">
+
+  <!-- Left accent line -->
+  <line x1="26" y1="22" x2="26" y2="118" stroke="#CDD1C3" stroke-width="1.5"/>
+
+  <!-- Three marks: pending / inferred / fact -->
+  <circle cx="26" cy="110" r="5.5" fill="none" stroke="#6E7568" stroke-width="1.5" stroke-dasharray="3 2.2"/>
+  <circle cx="26" cy="70" r="5.5" fill="none" stroke="#54663D" stroke-width="1.5"/>
+  <circle cx="26" cy="30" r="5.5" fill="#2C6B67"/>
+
+  <!-- Line 1: Record — R highlighted -->
+  <text x="48" y="74"
+        font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif"
+        font-size="44" font-weight="700" letter-spacing="-0.5">
+    <tspan fill="#2C6B67">R</tspan><tspan fill="#1C231F">ecord</tspan>
+  </text>
+
+  <!-- Line 2: and (A highlighted) + gap + Grow (G highlighted) -->
+  <text x="50" y="116"
+        font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif"
+        font-size="30" font-weight="400">
+    <tspan fill="#2C6B67">A</tspan><tspan fill="#6E7568">nd</tspan>
+  </text>
+  <text x="132" y="116"
+        font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif"
+        font-size="30" font-weight="600">
+    <tspan fill="#2C6B67">G</tspan><tspan fill="#54663D">row</tspan>
+  </text>
+
+</svg>

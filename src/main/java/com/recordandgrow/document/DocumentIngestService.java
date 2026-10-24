@@ -9,6 +9,7 @@ import com.recordandgrow.document.chunk.Chunk;
 import com.recordandgrow.document.chunk.ChunkResult;
 import com.recordandgrow.document.chunk.Chunker;
 import com.recordandgrow.document.chunk.TextNormalizer;
+import com.recordandgrow.document.dto.DocumentChunkLocator;
 import com.recordandgrow.document.dto.DocumentChunkResponse;
 import com.recordandgrow.document.dto.DocumentRegisterResult;
 import com.recordandgrow.document.dto.DocumentResponse;
@@ -369,6 +370,23 @@ public class DocumentIngestService {
                 .map(DocumentChunkResponse::from)
                 .toList();
         return PageResult.of(items, result.getTotal(), result.getCurrent(), result.getSize());
+    }
+
+    /**
+     * 把 chunkId 定位到分页：返回目标块与它所在的页，供前端直接跳转并高亮。
+     * 分页口径与 {@link #chunks(Long, int, int)} 一致：按 chunkIndex 升序。
+     */
+    public DocumentChunkLocator locateChunk(Long documentId, Long chunkId, int size) {
+        mustExist(documentId);
+        int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
+        DocumentChunk chunk = chunkId == null ? null : chunkMapper.selectById(chunkId);
+        if (chunk == null || !documentId.equals(chunk.getDocumentId())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档块不存在");
+        }
+        int index = chunk.getChunkIndex() == null ? 0 : Math.max(0, chunk.getChunkIndex());
+        long page = (long) index / safeSize + 1;
+        long total = chunkMapper.countByDocumentId(documentId);
+        return new DocumentChunkLocator(DocumentChunkResponse.from(chunk), page, safeSize, total);
     }
 
     private Document mustExist(Long documentId) {

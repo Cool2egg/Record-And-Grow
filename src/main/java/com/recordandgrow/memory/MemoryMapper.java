@@ -66,4 +66,20 @@ public interface MemoryMapper extends BaseMapper<Memory> {
              WHERE id = #{id} AND deleted = FALSE AND type = 'PENDING'
             """)
     int confirm(@Param("id") Long id, @Param("type") String type);
+
+    /**
+     * 确认并改措辞：content 与 normalized 一起改，避免检索仍用旧文本。
+     * normalized 是去重/检索键，必须由 Service 归一化后传入。
+     */
+    @Update("""
+            UPDATE memory
+               SET type = #{type}, content = #{content}, normalized = #{normalized},
+                   proposed_type = NULL,
+                   confirmed_at = now(), updated_at = now()
+             WHERE id = #{id} AND deleted = FALSE AND type = 'PENDING'
+            """)
+    int confirmWithContent(@Param("id") Long id,
+                           @Param("type") String type,
+                           @Param("content") String content,
+                           @Param("normalized") String normalized);
 }

@@ -1,6 +1,7 @@
 package com.recordandgrow.timeline;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -31,6 +32,14 @@ public class TimelineEntry {
 
     private OffsetDateTime startTime;
 
+    /**
+     * 结束时刻，null 表示进行中。
+     *
+     * <p>{@code updateStrategy = ALWAYS}：PUT 是全量更新，必须能把 end_time 从有值改为 null；
+     * MyBatis-Plus 默认跳过 null 字段，不加这个注解会导致「清空结束时间」静默失效。
+     * 注意：这也意味着任何 {@code updateById} 都必须显式带上 endTime，否则会被写成 null。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private OffsetDateTime endTime;
 
     @TableField(fill = FieldFill.INSERT)

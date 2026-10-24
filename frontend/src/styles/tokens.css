@@ -1,0 +1,32 @@
+:root {
+  /* 账本纸的冷灰绿，不是暖米色 */
+  --ink: #1c231f;
+  --paper: #eff0e9;
+  --curtain: #f7f8f2;
+  --moss: #54663d;
+  --line: #cdd1c3;
+  --muted: #6e7568;
+
+  /* 来源色只用于 3px 刻度与短标签 */
+  --timeline: #2c6b67;
+  --document: #8a6e24;
+  --memory: #63538a;
+  --graph: #4b6472;
+
+  --moss-06: rgba(84, 102, 61, 0.06);
+  --moss-14: rgba(84, 102, 61, 0.14);
+  --moss-28: rgba(84, 102, 61, 0.28);
+  --ink-04: rgba(28, 35, 31, 0.04);
+  --ink-08: rgba(28, 35, 31, 0.08);
+  --ink-56: rgba(28, 35, 31, 0.56);
+
+  --kai: 'LXGW WenKai Screen', 'Kaiti SC', 'STKaiti', 'KaiTi', serif;
+  --hei: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei UI',
+    'Microsoft YaHei', sans-serif;
+  --mono: 'SFMono-Regular', 'Cascadia Mono', 'JetBrains Mono', Consolas, monospace;
+
+  --rail: 220px;
+  --notes: 300px;
+  --measure: 680px;
+  --radius: 4px;
+}

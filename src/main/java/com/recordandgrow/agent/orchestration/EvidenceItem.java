@@ -25,7 +25,9 @@ public record EvidenceItem(
         OffsetDateTime endTime,
         Long chunkId,
         String heading,
-        Double score) {
+        Double score,
+        /** 图谱边的出处文档；其余来源为 null。 */
+        Long documentId) {
 
     private static final int EXCERPT_CHARS = 120;
 
@@ -34,7 +36,11 @@ public record EvidenceItem(
             case "timeline" -> new SseEvents.SourceItem(ref, kind, id, startTime, endTime, excerpt());
             case "document" -> new SseEvents.SourceItem(ref, kind, id, null, null, excerpt(),
                     chunkId, title, heading, score);
-            case "memory" -> new SseEvents.SourceItem(ref, kind, id, null, null, excerpt());
+            // 记忆的 title 存的是 FACT / INFERRED，落到 memoryType；score 是置信度
+            case "memory" -> new SseEvents.SourceItem(ref, kind, id, null, null, excerpt(),
+                    null, null, null, score, title, null);
+            case "graph" -> new SseEvents.SourceItem(ref, kind, id, null, null, excerpt(),
+                    null, title, null, null, null, documentId);
             default -> new SseEvents.SourceItem(ref, kind, id, null, null, excerpt());
         };
     }
@@ -81,23 +87,23 @@ public record EvidenceItem(
 
     public static EvidenceItem timeline(String ref, TimelineEntryResponse entry) {
         return new EvidenceItem(ref, "timeline", entry.getId(), null, entry.getContent(),
-                entry.getStartTime(), entry.getEndTime(), null, null, null);
+                entry.getStartTime(), entry.getEndTime(), null, null, null, null);
     }
 
     public static EvidenceItem document(String ref, com.recordandgrow.retrieval.document.DocumentHit hit) {
         return new EvidenceItem(ref, "document", hit.documentId(), hit.title(), hit.content(),
-                null, null, hit.chunkId(), hit.heading(), hit.score());
+                null, null, hit.chunkId(), hit.heading(), hit.score(), null);
     }
 
     public static EvidenceItem memory(String ref, MemoryResponse memory) {
         return new EvidenceItem(ref, "memory", memory.id(), memory.type(), memory.content(),
-                null, null, null, null, memory.confidence());
+                null, null, null, null, memory.confidence(), null);
     }
 
     public static EvidenceItem graph(String ref, com.recordandgrow.graph.GraphHit hit) {
         return new EvidenceItem(ref, "graph", hit.edgeId(), hit.title(),
                 hit.source() + " --" + hit.relation() + "--> " + hit.target(),
-                null, null, null, null, null);
+                null, null, null, null, null, hit.documentId());
     }
 
     public String sectionName() {

@@ -88,6 +88,18 @@ services:
       timeout: 5s
       retries: 20
 
+  # 前端（模块十三）：nginx 托管静态文件，/api 与 /mcp 反代到宿主机 8080。
+  # 后端不在 compose 里：先在宿主机 `mvn spring-boot:run`，再 `docker compose up -d frontend`。
+  # 访问 http://localhost:8081；SSE 已关闭 nginx 缓冲。
+  frontend:
+    build:
+      context: ./frontend
+    container_name: recordandgrow-frontend
+    ports:
+      - "8081:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   # 可选知识图谱存储（默认不用）：docker compose --profile graph up -d neo4j
   # 启动后：GRAPH_STORE=neo4j NEO4J_PASSWORD=recordandgrow
   neo4j:

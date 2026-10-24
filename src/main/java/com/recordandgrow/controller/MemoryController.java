@@ -6,6 +6,7 @@ import com.recordandgrow.infra.response.ApiResponse;
 import com.recordandgrow.infra.response.PageResult;
 import com.recordandgrow.memory.MemoryService;
 import com.recordandgrow.memory.MemoryType;
+import com.recordandgrow.memory.dto.MemoryConfirmRequest;
 import com.recordandgrow.memory.dto.MemoryCreateRequest;
 import com.recordandgrow.memory.dto.MemoryResponse;
 import jakarta.validation.Valid;
@@ -65,8 +66,12 @@ public class MemoryController {
     }
 
     @PostMapping("/{id}/confirm")
-    public ApiResponse<MemoryResponse> confirm(@PathVariable Long id) {
-        return ApiResponse.success(memoryService.confirm(id));
+    public ApiResponse<MemoryResponse> confirm(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) MemoryConfirmRequest request) {
+        return ApiResponse.success(memoryService.confirm(id,
+                request == null ? null : request.content(),
+                request == null ? null : request.type()));
     }
 
     @PostMapping("/{id}/reject")
