@@ -53,5 +53,15 @@ scripts/lightrag.env
 .attach_pid*
 body.json
 
-# ---- 第三方参考文章（仅本地阅读，不入库） ----
-docs/ragent-doc/
+# ---- 前端 ----
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+.npm-cache/
+
+# ---- 文档：除 docs/images 外只保留在本地，不入库 ----
+# 注意：已被 git 跟踪的旧文档不会因为这条规则自动消失；
+# 需要停止跟踪时用 `git rm -r --cached docs`（文件本身保留）。
+docs/*
+!docs/images/
+!docs/images/**
