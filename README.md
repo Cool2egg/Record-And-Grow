@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="docs/images/logo.svg" alt="RecordAndGrow" height="160">
+  <img src="docs/images/logo.svg" alt="RecordAndGrow" height="100">
 </p>
 
 <p align="center">
-![Java](https://img.shields.io/badge/Java-21-blue?style=flat-square&logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.0-green?style=flat-square&logo=springboot&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![AgentScope](https://img.shields.io/badge/AgentScope-2.0-orange?style=flat-square)
-![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)
-![Ant Design](https://img.shields.io/badge/Ant_Design-6-0170FE?style=flat-square&logo=antdesign&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
+  <img src="https://img.shields.io/badge/Java-21-blue?style=flat-square&logo=openjdk&logoColor=white" alt="Java">
+  <img src="https://img.shields.io/badge/Spring_Boot-4.0-green?style=flat-square&logo=springboot&logoColor=white" alt="Spring Boot">
+  <img src="https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/AgentScope-2.0-orange?style=flat-square" alt="AgentScope">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/Ant_Design-6-0170FE?style=flat-square&logo=antdesign&logoColor=white" alt="Ant Design">
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="License">
 </p>
 
 一个根据你自己的记录和文档来回答问题的对话 Agent。它分得清哪些是你说过的事实、哪些是它的推断，每句话都能点开核对出处。

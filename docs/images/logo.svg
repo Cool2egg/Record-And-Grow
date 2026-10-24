@@ -1,37 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 180" width="520" height="180">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 110" width="580" height="110">
 
-  <!-- Left accent line -->
-  <line x1="32" y1="26" x2="32" y2="154" stroke="#CDD1C3" stroke-width="2"/>
+  <!-- Left accent line with three marks -->
+  <line x1="28" y1="14" x2="28" y2="96" stroke="#CDD1C3" stroke-width="1.5"/>
+  <circle cx="28" cy="88" r="5.5" fill="none" stroke="#6E7568" stroke-width="1.5" stroke-dasharray="3 2.2"/>
+  <circle cx="28" cy="55" r="5.5" fill="none" stroke="#54663D" stroke-width="1.5"/>
+  <circle cx="28" cy="22" r="5.5" fill="#2C6B67"/>
 
-  <!-- Three marks: pending / inferred / fact -->
-  <circle cx="32" cy="144" r="7" fill="none" stroke="#6E7568" stroke-width="2" stroke-dasharray="3.5 2.8"/>
-  <circle cx="32" cy="90"  r="7" fill="none" stroke="#54663D" stroke-width="2"/>
-  <circle cx="32" cy="36"  r="7" fill="#2C6B67"/>
-
-  <!-- Line 1: R highlighted pill + ecord -->
-  <!-- R background pill -->
-  <rect x="53" y="30" width="48" height="68" rx="6" fill="#2C6B67"/>
-  <text x="56" y="98"
+  <!-- Single line: Record·And·Grow with R A G underlined + bold -->
+  <text x="50" y="78"
         font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif"
-        font-size="72" font-weight="800" letter-spacing="-1">
-    <tspan fill="#EFF0E9">R</tspan><tspan fill="#1C231F">ecord</tspan>
+        font-size="62" letter-spacing="-1">
+    <!-- R: accent color, heavier, underline via rect below -->
+    <tspan fill="#2C6B67" font-weight="900">R</tspan><tspan fill="#1C231F" font-weight="700">ecord</tspan>
+    <!-- A: same treatment -->
+    <tspan fill="#2C6B67" font-weight="900">A</tspan><tspan fill="#6E7568" font-weight="300">nd</tspan>
+    <!-- G: same treatment -->
+    <tspan fill="#2C6B67" font-weight="900">G</tspan><tspan fill="#54663D" font-weight="600">row</tspan>
   </text>
 
-  <!-- Line 2: A pill + nd + gap + G pill + row -->
-  <!-- A background pill -->
-  <rect x="57" y="112" width="34" height="50" rx="5" fill="#2C6B67"/>
-  <text x="58" y="155"
-        font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif"
-        font-size="42" font-weight="300">
-    <tspan fill="#EFF0E9" font-weight="700">A</tspan><tspan fill="#6E7568">nd</tspan>
-  </text>
-
-  <!-- G background pill -->
-  <rect x="200" y="112" width="34" height="50" rx="5" fill="#2C6B67"/>
-  <text x="200" y="155"
-        font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif"
-        font-size="42" font-weight="600">
-    <tspan fill="#EFF0E9" font-weight="700">G</tspan><tspan fill="#54663D">row</tspan>
-  </text>
+  <!-- Underlines for R, A, G — positioned manually under each letter -->
+  <line x1="50"  y1="86" x2="87"  y2="86" stroke="#2C6B67" stroke-width="3" stroke-linecap="round"/>
+  <line x1="296" y1="86" x2="333" y2="86" stroke="#2C6B67" stroke-width="3" stroke-linecap="round"/>
+  <line x1="415" y1="86" x2="452" y2="86" stroke="#2C6B67" stroke-width="3" stroke-linecap="round"/>
 
 </svg>
