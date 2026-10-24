@@ -6,12 +6,11 @@
   <circle cx="26" cy="45" r="5" fill="none" stroke="#54663D" stroke-width="1.5"/>
   <circle cx="26" cy="22" r="5" fill="#2C6B67"/>
 
-  <!-- Single line: RecordAndGrow
-       RAG in accent teal, slightly heavier; rest in lighter weights for contrast -->
-  <text x="48" y="60"
-        font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif"
-        font-size="52" letter-spacing="2">
-    <tspan fill="#2C6B67" font-weight="600">R</tspan><tspan fill="#1C231F" font-weight="300">ecord</tspan><tspan fill="#2C6B67" font-weight="600">A</tspan><tspan fill="#6E7568" font-weight="300">nd</tspan><tspan fill="#2C6B67" font-weight="600">G</tspan><tspan fill="#54663D" font-weight="300">row</tspan>
+  <!-- RecordAndGrow: Georgia serif, RAG heavier + teal, rest lighter -->
+  <text x="48" y="62"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="54" letter-spacing="1">
+    <tspan fill="#2C6B67" font-weight="bold">R</tspan><tspan fill="#1C231F" font-weight="normal">ecord</tspan><tspan fill="#2C6B67" font-weight="bold">A</tspan><tspan fill="#6E7568" font-weight="normal">nd</tspan><tspan fill="#2C6B67" font-weight="bold">G</tspan><tspan fill="#54663D" font-weight="normal">row</tspan>
   </text>
 
 </svg>
