@@ -1,6 +1,7 @@
 package com.recordandgrow.controller;
 
 import com.recordandgrow.document.DocumentIngestService;
+import com.recordandgrow.document.dto.DocumentChunkLocator;
 import com.recordandgrow.document.dto.DocumentChunkResponse;
 import com.recordandgrow.document.dto.DocumentRegisterResult;
 import com.recordandgrow.document.dto.DocumentResponse;
@@ -87,13 +88,20 @@ public class DocumentController {
         return ApiResponse.success(service.chunks(id, page, size));
     }
 
+    /** 引用定位：拿到 chunkId 直接返回目标块与所在页，不用逐页扫描。 */
+    @GetMapping("/{id}/chunks/{chunkId}")
+    public ApiResponse<DocumentChunkLocator> locateChunk(
+            @PathVariable Long id,
+            @PathVariable Long chunkId,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(service.locateChunk(id, chunkId, size));
+    }
+
     @PostMapping("/{id}/reindex")
     public ResponseEntity<ApiResponse<Void>> reindex(@PathVariable Long id) {
         service.reindex(id);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponse.success());
-    }
-
-    @DeleteMapping("/{id}")
+    }    @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiResponse.success();

@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * 一次 Agent 请求的证据账本。
@@ -65,6 +66,9 @@ public class AgentToolContext {
     private int memorySearched;
     private int graphSearched;
     private String researchNotes;
+    /** 流式模式下的 step 出口；非流式保持 null。 */
+    private Consumer<SseEvents.Step> stepSink;
+    private int stepSeq;
 
     public AgentToolContext(Long conversationId, TimeWindow defaultWindow,
                             List<String> defaultKeywords, int maxItems, ZoneId zone) {
@@ -100,6 +104,36 @@ public class AgentToolContext {
     public synchronized void recordToolCall(String name) {
         toolCalls.add(name);
         counters.merge(name, 1, Integer::sum);
+    }
+
+    /**
+     * 绑定 step 出口。只有流式请求会设置；非流式请求保持 null，行为不变。
+     * 必须在检索开始前调用。
+     */
+    public synchronized void setStepSink(Consumer<SseEvents.Step> sink) {
+        this.stepSink = sink;
+    }
+
+    /**
+     * 记录一次工具调用结果并立即外发 step。
+     *
+     * <p>序号在锁内递增，保证并发工具调用也能得到唯一且不跳号的 seq。
+     * 发送在锁内完成：step 只是一次内存写入 + SSE 写，阻塞时间可忽略。
+     */
+    public synchronized void recordStep(String tool, String query, int hits,
+                                        boolean ok, long ms, String error) {
+        SseEvents.Step step = new SseEvents.Step(++stepSeq, tool, truncate(query, 120),
+                Math.max(0, hits), ok, Math.max(0, ms), error);
+        if (stepSink != null) {
+            stepSink.accept(step);
+        }
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() <= max ? value : value.substring(0, max) + "…";
     }
 
     /** @return 本次新增的证据（用于工具结果回给模型） */

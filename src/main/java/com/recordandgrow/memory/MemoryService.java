@@ -95,21 +95,60 @@ public class MemoryService {
      * 确认候选：PENDING → proposedType（缺省 FACT）。已确认的重复调用直接返回，保持幂等。
      */
     public MemoryResponse confirm(Long id) {
+        return confirm(id, null, null);
+    }
+
+    /**
+     * 确认候选，并允许顺手改措辞 / 覆盖类型（模块十三 §5.3）。
+     *
+     * <p>{@code content} 为空表示原样确认；非空时先裁剪再写回 content 与 normalized，
+     * 保证后续检索命中新文本。{@code type} 为空落到 {@code proposedType}，
+     * 目前只接受 FACT / INFERRED——PENDING 不是可确认的落点。
+     */
+    public MemoryResponse confirm(Long id, String content, String type) {
         Memory memory = mustExist(id);
+        String trimmed = content == null ? null : content.trim();
+        if (trimmed != null && trimmed.isEmpty()) {
+            trimmed = null;
+        }
+        if (trimmed != null && trimmed.length() > 500) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "content 长度不能超过 500");
+        }
+        MemoryType override = MemoryType.parse(type);
+        if (type != null && !type.isBlank()
+                && (override == null || override == MemoryType.PENDING)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "type 只能是 FACT / INFERRED");
+        }
+
         if (!MemoryType.PENDING.name().equals(memory.getType())) {
+            if (trimmed != null || override != null) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "只有待确认的记忆可以修改");
+            }
             return MemoryResponse.from(memory);
         }
-        MemoryType target = MemoryType.parse(memory.getProposedType());
+
+        MemoryType target = override;
+        if (target == null) {
+            target = MemoryType.parse(memory.getProposedType());
+        }
         if (target == null || target == MemoryType.PENDING) {
             target = MemoryType.FACT;
         }
-        int updated = mapper.confirm(id, target.name());
+
+        String normalized = trimmed == null ? null : normalize(trimmed);
+        int updated = trimmed == null
+                ? mapper.confirm(id, target.name())
+                : mapper.confirmWithContent(id, target.name(), trimmed, normalized);
         if (updated == 0) {
             // 并发下已被另一个请求确认/删除：以库里的最新状态为准
             return MemoryResponse.from(mustExist(id));
         }
         memory.setType(target.name());
         memory.setProposedType(null);
+        if (trimmed != null) {
+            memory.setContent(trimmed);
+            memory.setNormalized(normalized);
+        }
         memory.setConfirmedAt(OffsetDateTime.now());
         memory.setUpdatedAt(OffsetDateTime.now());
         return MemoryResponse.from(memory);

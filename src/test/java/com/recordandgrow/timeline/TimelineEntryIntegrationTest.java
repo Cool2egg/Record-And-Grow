@@ -66,8 +66,10 @@ class TimelineEntryIntegrationTest {
 
         TimelineEntryResponse fetched = service.get(created.getId());
         assertThat(fetched.getContent()).isEqualTo("早上跑步 5 公里");
-        assertThat(fetched.getStartTime()).isEqualTo(dt(14, 7, 0));
-        assertThat(fetched.getEndTime()).isEqualTo(dt(14, 7, 30));
+        // 响应统一 UTC：时刻不变，偏移固定为 Z
+        assertThat(fetched.getStartTime()).isEqualTo(utc(14, 7, 0));
+        assertThat(fetched.getEndTime()).isEqualTo(utc(14, 7, 30));
+        assertThat(fetched.getStartTime().getOffset()).isEqualTo(ZoneOffset.UTC);
     }
 
     @Test
@@ -87,6 +89,23 @@ class TimelineEntryIntegrationTest {
         TimelineEntryResponse updated = service.update(created.getId(), request("新内容", dt(14, 7, 0), null));
 
         assertThat(updated.getContent()).isEqualTo("新内容");
+        assertThat(updated.getUpdatedAt()).isAfter(before);
+    }
+
+    @Test
+    void updateShouldClearEndTime() throws Exception {
+        TimelineEntryResponse created = service.create(
+                request("原本有结束时间", dt(14, 7, 0), dt(14, 8, 0)));
+        OffsetDateTime before = created.getUpdatedAt();
+
+        Thread.sleep(20);
+
+        // PUT 全量更新：endTime 传 null，表示改回「进行中」
+        TimelineEntryResponse updated = service.update(
+                created.getId(), request("原本有结束时间", dt(14, 7, 0), null));
+
+        assertThat(updated.getEndTime()).isNull();
+        assertThat(service.get(created.getId()).getEndTime()).isNull();
         assertThat(updated.getUpdatedAt()).isAfter(before);
     }
 
@@ -280,5 +299,10 @@ class TimelineEntryIntegrationTest {
     /** 以 +08:00（Asia/Shanghai 无夏令时）构造固定时刻，便于按「天」表述边界。 */
     private OffsetDateTime dt(int day, int hour, int minute) {
         return OffsetDateTime.of(2026, 10, day, hour, minute, 0, 0, ZoneOffset.ofHours(8));
+    }
+
+    /** 同一时刻的 UTC 表示，用于断言响应契约。 */
+    private OffsetDateTime utc(int day, int hour, int minute) {
+        return dt(day, hour, minute).withOffsetSameInstant(ZoneOffset.UTC);
     }
 }

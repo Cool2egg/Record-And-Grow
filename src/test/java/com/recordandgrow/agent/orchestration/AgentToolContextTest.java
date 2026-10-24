@@ -48,6 +48,46 @@ class AgentToolContextTest {
         assertThat(sources.retrieval().memoryIncluded()).isEqualTo(1);
         assertThat(sources.retrieval().graphIncluded()).isEqualTo(1);
         assertThat(sources.retrieval().documentSearched()).isTrue();
+
+        // 模块十三 §5.2：记忆类型与图谱出处必须进入 sources，前端才能分事实/推断、跳回文档
+        var memory = sources.items().stream()
+                .filter(item -> item.type().equals("memory")).findFirst().orElseThrow();
+        assertThat(memory.memoryType()).isEqualTo("FACT");
+        assertThat(memory.score()).isEqualTo(1.0);
+        var graph = sources.items().stream()
+                .filter(item -> item.type().equals("graph")).findFirst().orElseThrow();
+        assertThat(graph.documentId()).isEqualTo(10L);
+        assertThat(graph.title()).isEqualTo("笔记");
+    }
+
+    @Test
+    void stepsShouldBeSequencedAndSentToSink() {
+        AgentToolContext context = new AgentToolContext(1L, WINDOW, List.of(), 20, ZONE);
+        java.util.List<com.recordandgrow.ai.sse.SseEvents.Step> steps =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
+        context.setStepSink(steps::add);
+
+        context.recordStep("search_timeline", "上个月跑步", 3, true, 412, null);
+        context.recordStep("search_documents", "x".repeat(200), 0, false, 8, "文档检索失败");
+
+        assertThat(steps).hasSize(2);
+        assertThat(steps.get(0).seq()).isEqualTo(1);
+        assertThat(steps.get(0).tool()).isEqualTo("search_timeline");
+        assertThat(steps.get(0).hits()).isEqualTo(3);
+        assertThat(steps.get(0).ok()).isTrue();
+        assertThat(steps.get(0).ms()).isEqualTo(412);
+        assertThat(steps.get(1).seq()).isEqualTo(2);
+        assertThat(steps.get(1).ok()).isFalse();
+        assertThat(steps.get(1).error()).isEqualTo("文档检索失败");
+        // query 截断，避免把超长入参原样推给浏览器
+        assertThat(steps.get(1).query().length()).isLessThanOrEqualTo(121);
+    }
+
+    @Test
+    void stepsWithoutSinkShouldBeNoop() {
+        AgentToolContext context = new AgentToolContext(1L, WINDOW, List.of(), 20, ZONE);
+        context.recordStep("search_timeline", "x", 0, true, 1, null);
+        // 没有出口时只需要不抛异常，非流式路径行为保持不变
     }
 
     @Test

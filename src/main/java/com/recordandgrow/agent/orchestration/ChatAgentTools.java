@@ -85,17 +85,18 @@ public class ChatAgentTools {
     public String searchTimeline(
             @ToolParam(name = "query", description = "检索问题或关键词，例如「上个月跑步」") String query) {
         context.recordToolCall("search_timeline");
+        long started = System.nanoTime();
         try {
             TimeWindow window = windowParser.parse(query);
             List<String> keywords = keywordExtractor.extract(query);
             RetrievalResult result = timelineRetriever.retrieve(window, keywords);
             List<EvidenceItem> added = context.addTimeline(result);
-            return json(Map.of(
+            return stepOk("search_timeline", query, started, result.retrieved(), json(Map.of(
                     "count", result.retrieved(),
                     "matched", result.matched(),
-                    "items", itemList(added)));
+                    "items", itemList(added))));
         } catch (RuntimeException e) {
-            return error("时间线检索失败");
+            return stepFailed("search_timeline", query, started, "时间线检索失败");
         }
     }
 
@@ -104,20 +105,21 @@ public class ChatAgentTools {
     public String getTimelineByDate(
             @ToolParam(name = "date", description = "日期，格式 yyyy-MM-dd，例如 2026-10-01") String date) {
         context.recordToolCall("get_timeline_by_date");
+        long started = System.nanoTime();
         try {
             LocalDate localDate = LocalDate.parse(date == null ? "" : date.trim());
             OffsetDateTime start = localDate.atStartOfDay(zone).toOffsetDateTime();
             TimeWindow window = new TimeWindow(start, start.plusDays(1), TimeBasis.ABSOLUTE_DAY, false);
             RetrievalResult result = timelineRetriever.retrieve(window, List.of());
             List<EvidenceItem> added = context.addTimeline(result);
-            return json(Map.of(
+            return stepOk("get_timeline_by_date", date, started, result.retrieved(), json(Map.of(
                     "date", localDate.toString(),
                     "count", result.retrieved(),
-                    "items", itemList(added)));
+                    "items", itemList(added))));
         } catch (DateTimeParseException e) {
-            return error("日期格式应为 yyyy-MM-dd");
+            return stepFailed("get_timeline_by_date", date, started, "日期格式应为 yyyy-MM-dd");
         } catch (RuntimeException e) {
-            return error("时间线检索失败");
+            return stepFailed("get_timeline_by_date", date, started, "时间线检索失败");
         }
     }
 
@@ -126,6 +128,7 @@ public class ChatAgentTools {
     public String searchDocuments(
             @ToolParam(name = "query", description = "检索问题或关键词") String query) {
         context.recordToolCall("search_documents");
+        long started = System.nanoTime();
         try {
             DocumentRetrievalResult result = documentFusionService.retrieve(query);
             List<EvidenceItem> added = context.addDocuments(result);
@@ -136,9 +139,9 @@ public class ChatAgentTools {
                     ? null : result.degradeReason().name());
             payload.put("count", result.hits().size());
             payload.put("items", itemList(added));
-            return json(payload);
+            return stepOk("search_documents", query, started, result.hits().size(), json(payload));
         } catch (RuntimeException e) {
-            return error("文档检索失败");
+            return stepFailed("search_documents", query, started, "文档检索失败");
         }
     }
 
@@ -147,15 +150,18 @@ public class ChatAgentTools {
     public String searchMemory(
             @ToolParam(name = "query", description = "要查的偏好或事实关键词") String query) {
         context.recordToolCall("search_memory");
+        long started = System.nanoTime();
         if (!agentProperties.isMemoryTools()) {
-            return json(Map.of("count", 0, "items", List.of()));
+            return stepOk("search_memory", query, started, 0,
+                    json(Map.of("count", 0, "items", List.of())));
         }
         try {
             List<MemoryResponse> memories = memoryService.search(query, 5);
             List<EvidenceItem> added = context.addMemories(memories);
-            return json(Map.of("count", memories.size(), "items", itemList(added)));
+            return stepOk("search_memory", query, started, memories.size(),
+                    json(Map.of("count", memories.size(), "items", itemList(added))));
         } catch (RuntimeException e) {
-            return error("记忆检索失败");
+            return stepFailed("search_memory", query, started, "记忆检索失败");
         }
     }
 
@@ -164,19 +170,21 @@ public class ChatAgentTools {
     public String searchGraph(
             @ToolParam(name = "query", description = "实体名或关系问题") String query) {
         context.recordToolCall("search_graph");
+        long started = System.nanoTime();
         if (!agentProperties.isGraphTools()) {
-            return json(Map.of("count", 0, "items", List.of()));
+            return stepOk("search_graph", query, started, 0,
+                    json(Map.of("count", 0, "items", List.of())));
         }
         try {
             GraphRetrievalResult result = graphRetriever.retrieve(query);
             List<EvidenceItem> added = context.addGraph(result);
-            return json(Map.of(
+            return stepOk("search_graph", query, started, result.hits().size(), json(Map.of(
                     "searched", result.searched(),
                     "degraded", result.degraded(),
                     "count", result.hits().size(),
-                    "items", itemList(added)));
+                    "items", itemList(added))));
         } catch (RuntimeException e) {
-            return error("图谱检索失败");
+            return stepFailed("search_graph", query, started, "图谱检索失败");
         }
     }
 
@@ -186,8 +194,9 @@ public class ChatAgentTools {
             @ToolParam(name = "content", description = "一条记忆，60 字以内，例如「用户每天早起跑步」") String content,
             @ToolParam(name = "type", description = "FACT（用户明确陈述）或 INFERRED（你的归纳）") String type) {
         context.recordToolCall("propose_memory");
+        long started = System.nanoTime();
         if (!agentProperties.isProposeMemory() || content == null || content.isBlank()) {
-            return json(Map.of("saved", false));
+            return stepOk("propose_memory", content, started, 0, json(Map.of("saved", false)));
         }
         MemoryType proposed = MemoryType.parse(type);
         if (proposed == null || proposed == MemoryType.PENDING) {
@@ -202,10 +211,27 @@ public class ChatAgentTools {
                             + ",\"excerpt\":\"" + escape(truncate(content, 80)) + "\"}]",
                     MemorySource.AI_EXTRACTED,
                     context.conversationId()));
-            return json(Map.of("saved", id != null, "pendingId", id == null ? 0L : id));
+            return stepOk("propose_memory", content, started, id == null ? 0 : 1,
+                    json(Map.of("saved", id != null, "pendingId", id == null ? 0L : id)));
         } catch (RuntimeException e) {
-            return json(Map.of("saved", false));
+            return stepFailed("propose_memory", content, started, "记忆提交失败");
         }
+    }
+
+    /** 记录一条成功 step，并把工具原始结果原样返回给模型。 */
+    private String stepOk(String tool, String query, long startedNanos, int hits, String payload) {
+        context.recordStep(tool, query, hits, true, elapsedMs(startedNanos), null);
+        return payload;
+    }
+
+    /** 记录一条失败 step；返回值仍是给模型看的 {@code {"error": ...}}。 */
+    private String stepFailed(String tool, String query, long startedNanos, String message) {
+        context.recordStep(tool, query, 0, false, elapsedMs(startedNanos), message);
+        return error(message);
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return Math.max(0, (System.nanoTime() - startedNanos) / 1_000_000);
     }
 
     private static List<Map<String, Object>> itemList(List<EvidenceItem> items) {

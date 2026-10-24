@@ -90,6 +90,49 @@ class MemoryServiceTest {
     }
 
     @Test
+    void confirmShouldAllowEditingContentAndOverridingType() {
+        Memory pending = new Memory();
+        pending.setId(5L);
+        pending.setType("PENDING");
+        pending.setProposedType("INFERRED");
+        pending.setContent("可能偏好远程办公");
+        pending.setNormalized("可能偏好远程办公");
+        when(mapper.selectById(5L)).thenReturn(pending);
+        when(mapper.confirmWithContent(5L, "FACT", "偏好远程办公", "偏好远程办公")).thenReturn(1);
+
+        MemoryResponse response = service.confirm(5L, "  偏好远程办公 ", "FACT");
+
+        assertThat(response.type()).isEqualTo("FACT");
+        assertThat(response.content()).isEqualTo("偏好远程办公");
+        assertThat(response.confirmedAt()).isNotNull();
+        verify(mapper).confirmWithContent(5L, "FACT", "偏好远程办公", "偏好远程办公");
+    }
+
+    @Test
+    void confirmShouldRejectPendingAsOverrideType() {
+        when(mapper.selectById(6L)).thenReturn(pending(6L, "候选"));
+
+        assertThatThrownBy(() -> service.confirm(6L, null, "PENDING"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("FACT / INFERRED");
+    }
+
+    @Test
+    void confirmShouldRejectEditingConfirmedMemory() {
+        Memory fact = new Memory();
+        fact.setId(7L);
+        fact.setType("FACT");
+        fact.setContent("每天跑步");
+        when(mapper.selectById(7L)).thenReturn(fact);
+
+        assertThatThrownBy(() -> service.confirm(7L, "改一下", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("只有待确认");
+
+        assertThat(service.confirm(7L).content()).isEqualTo("每天跑步");
+    }
+
+    @Test
     void rejectOnlyAllowsPending() {
         Memory fact = new Memory();
         fact.setId(4L);
@@ -152,5 +195,14 @@ class MemoryServiceTest {
 
         assertThat(service.pending(5)).singleElement()
                 .satisfies(response -> assertThat(response.type()).isEqualTo("PENDING"));
+    }
+
+    private static Memory pending(Long id, String content) {
+        Memory memory = new Memory();
+        memory.setId(id);
+        memory.setType("PENDING");
+        memory.setProposedType("INFERRED");
+        memory.setContent(content);
+        return memory;
     }
 }
