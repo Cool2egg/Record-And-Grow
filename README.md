@@ -41,7 +41,7 @@
  │    ├─ search_memory                             只查已确认的记忆
  │    ├─ search_graph                              知识图谱一跳关系
  │    └─ propose_memory                            发现长期习惯时提交为「待确认」
- │      每调一次工具，前端实时收到一条 step（调了什么、查到几条）
+ │  
  │
  ├─ 证据整理：按来源配额截断，统一分配编号 T/D/M/G，先把 sources 推给前端
  │
@@ -50,7 +50,7 @@
  └─ 收尾：保存对话；后台从这轮问答里提炼记忆候选，写入「待确认」
 ```
 
-检索 Agent 出错时，会回落到固定的"时间线 + 文档"两路检索，保证回答至少有材料。没配模型 key 时，对话接口直接返回明确的错误类型，其余页面照常可用。
+检索 Agent 出错时，会回落到固定的"时间线 + 文档"两路检索，保证回答至少有材料。
 
 ## 功能
 
@@ -99,7 +99,7 @@
 docker compose up -d postgres          # 数据库
 docker compose run --rm flyway         # 建表
 
-export DEEPSEEK_API_KEY=sk-...         # 对话（不配也能启动，对话会提示未配置）
+export DEEPSEEK_API_KEY=sk-...         # 对话
 export DASHSCOPE_API_KEY=sk-...        # 向量与重排
 mvn spring-boot:run                    # 后端 http://localhost:8080
 
