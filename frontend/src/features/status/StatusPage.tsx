@@ -4,7 +4,7 @@ import dayjs from 'dayjs'
 import { statusApi } from '../../api'
 import { ErrorBlock, PageHeader } from '../../components/PageChrome'
 
-const FRONTEND_VERSION = '0.1.0'
+const FRONTEND_VERSION = '0.9.9'
 
 function StatusCell({
   label,

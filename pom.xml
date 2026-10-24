@@ -13,7 +13,7 @@
 
     <groupId>com.recordandgrow</groupId>
     <artifactId>record-and-grow</artifactId>
-    <version>0.9.0</version>
+    <version>0.9.9</version>
     <name>record-and-grow</name>
     <description>个人上下文对话 Agent（学习项目）</description>
 

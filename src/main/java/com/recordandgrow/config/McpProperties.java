@@ -15,7 +15,7 @@ public class McpProperties {
 
     private String serverName = "recordandgrow";
 
-    private String serverVersion = "0.9.0";
+    private String serverVersion = "0.9.9";
 
     public boolean isEnabled() {
         return enabled;

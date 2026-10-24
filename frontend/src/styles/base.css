@@ -152,26 +152,17 @@ ol {
   padding: 24px 20px 18px;
 }
 
-.brand-seal {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  border-radius: 3px;
-  background: var(--moss);
-  color: var(--curtain);
-  font-family: var(--kai);
-  font-size: 16px;
-  line-height: 1;
-  padding-bottom: 2px;
+.brand-name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 20px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: var(--ink);
 }
 
-.brand-name {
-  font-family: var(--kai);
-  font-size: 18px;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
+.brand-name b {
+  font-weight: 700;
+  color: var(--timeline);
 }
 
 .brand-sub {

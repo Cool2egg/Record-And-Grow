@@ -43,7 +43,7 @@ public class SystemController {
                             GraphProperties graphProperties,
                             @Value("${recordandgrow.mcp.enabled:true}") boolean mcpEnabled,
                             SkillRegistry skillRegistry,
-                            @Value("${recordandgrow.system.version:0.9.0}") String version) {
+                            @Value("${recordandgrow.system.version:0.9.9}") String version) {
         this.chatClient = chatClient;
         this.embeddingClient = embeddingClient;
         this.agentProperties = agentProperties;
