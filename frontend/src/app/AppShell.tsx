@@ -70,11 +70,10 @@ export function AppShell() {
       <aside className={`rail ${railOpen ? 'open' : ''}`}>
         <div className="rail-scroll">
           <div className="brand">
-            <span className="brand-seal" aria-hidden>
-              记
-            </span>
             <div>
-              <div className="brand-name">记录与生长</div>
+              <div className="brand-name" aria-label="RecordAndGrow">
+                <b>R</b>ecord<b>A</b>nd<b>G</b>row
+              </div>
               <div className="brand-sub">个人上下文记录簿</div>
             </div>
           </div>
@@ -172,7 +171,7 @@ export function AppShell() {
             >
               <MenuOutlined />
             </button>
-            <span className="bar-title">{currentNav?.label ?? '记录与生长'}</span>
+            <span className="bar-title">{currentNav?.label ?? 'RecordAndGrow'}</span>
             <span style={{ width: 30 }} />
           </div>
         ) : null}

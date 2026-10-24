@@ -1,7 +1,7 @@
 {
   "name": "record-and-grow-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.9.9",
   "type": "module",
   "description": "RecordAndGrow 的前端：带边注的记录簿",
   "scripts": {

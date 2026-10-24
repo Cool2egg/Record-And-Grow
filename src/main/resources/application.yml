@@ -125,7 +125,7 @@ recordandgrow:
     enabled: ${MCP_ENABLED:true}
     endpoint: /mcp
     server-name: recordandgrow
-    server-version: 0.9.0
+    server-version: 0.9.9
   # 模块十二：Skills。启动时扫描目录，命中触发词时注入回答 Prompt。
   skills:
     enabled: ${SKILLS_ENABLED:true}
