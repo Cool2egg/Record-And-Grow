@@ -98,6 +98,9 @@ tests/          # 单测（离线）+ 集成测试（Docker，默认跳过）
 
 ## 测试
 
+CI 配置在仓库根目录 `.github/workflows/python-ci.yml`（工作目录 `python-rewrite/`），
+只在本目录有改动时触发。
+
 ```bash
 uv run pytest -q                                        # 单测（离线，无需数据库）
 RUN_INTEGRATION=1 uv run pytest -q tests/integration    # Docker/testcontainers 起 pgvector

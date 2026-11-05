@@ -1,9 +1,19 @@
-name: CI
+name: Python CI
 
 on:
   push:
     branches: [main]
+    paths:
+      - "python-rewrite/**"
+      - ".github/workflows/python-ci.yml"
   pull_request:
+    paths:
+      - "python-rewrite/**"
+      - ".github/workflows/python-ci.yml"
+
+defaults:
+  run:
+    working-directory: python-rewrite
 
 jobs:
   quality:
@@ -16,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
       - name: Ruff
-        run: uv run ruff check app tests
+        run: uv run ruff check app tests scripts
       - name: Mypy (advisory)
         continue-on-error: true
         run: uv run mypy app
