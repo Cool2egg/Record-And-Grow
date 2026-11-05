@@ -1,0 +1,66 @@
+services:
+  postgres:
+    # 默认用 pgvector 官方镜像：只需向量能力，关键词通道自带 jieba + ILIKE 回退。
+    # 想用 pg_search BM25 时换成 parade db/paradedb:latest-pg18（自带 pgvector + pg_search）。
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: recordandgrow
+      POSTGRES_USER: recordandgrow
+      POSTGRES_PASSWORD: recordandgrow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recordandgrow -d recordandgrow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://recordandgrow:recordandgrow@postgres:5432/recordandgrow
+    env_file:
+      # 首次 clone 还没 cp .env.example .env 时也能起（健康检查会提示缺密钥）
+      - path: .env
+        required: false
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # 具名卷：首次挂载继承镜像里 /app/data 的属主，非 root 用户可写
+      - appdata:/app/data
+      # 技能只读挂载，热加载只读文件
+      - ./skills:/app/skills:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=3)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    # 复用现有前端构建产物；只替换 nginx 配置，把 /api 与 /mcp 指向 app 服务
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # 避开 Java 版前端（通常在 80）
+      - "8081:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  appdata:
