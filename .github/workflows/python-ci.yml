@@ -1,0 +1,48 @@
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "python-rewrite/**"
+      - ".github/workflows/python-ci.yml"
+  pull_request:
+    paths:
+      - "python-rewrite/**"
+      - ".github/workflows/python-ci.yml"
+
+defaults:
+  run:
+    working-directory: python-rewrite
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Ruff
+        run: uv run ruff check app tests scripts
+      - name: Mypy (advisory)
+        continue-on-error: true
+        run: uv run mypy app
+      - name: Pytest (unit)
+        run: uv run pytest -q
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Pytest (integration, testcontainers)
+        env:
+          RUN_INTEGRATION: "1"
+        run: uv run pytest -q tests/integration
